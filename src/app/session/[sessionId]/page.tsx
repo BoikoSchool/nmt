@@ -92,6 +92,8 @@ export default function SessionPage({
   const [attempt, setAttempt] = useState<Attempt | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isFinishing, setIsFinishing] = useState(false);
+  const [activeTestId, setActiveTestId] = useState<string | null>(null);
+
 
   // Data Fetching
   const sessionRef = useMemoFirebase(
@@ -107,6 +109,7 @@ export default function SessionPage({
     const fetchTestsAndSubjects = async () => {
       if (session.testIds.length === 0) {
         setTests([]);
+        setIsLoading(false);
         return;
       }
       const testsQuery = query(
@@ -147,6 +150,9 @@ export default function SessionPage({
 
       setAllQuestions(allQuestionsFromTests as EnrichedQuestion[]);
       setTests(enrichedTests);
+      if (enrichedTests.length > 0) {
+        setActiveTestId(enrichedTests[0].id);
+      }
     };
 
     fetchTestsAndSubjects();
@@ -213,7 +219,8 @@ export default function SessionPage({
 
     if (question.type === 'matching') {
         const [promptId, optionId] = value.split(':');
-        const newMatchingValue = { ...(currentAnswer.value || {}) };
+        const newMatchingValue = { ...(typeof currentAnswer.value === 'object' && currentAnswer.value !== null && !Array.isArray(currentAnswer.value) ? currentAnswer.value : {}) };
+        
         if (optionId) {
             newMatchingValue[promptId] = optionId;
         } else {
@@ -234,23 +241,31 @@ export default function SessionPage({
       setIsFinishing(true);
 
       let calculatedScore = 0;
+      let scoreByTest: Record<string, number> = {};
+
       allQuestions.forEach(q => {
           const answer = currentAnswers[q.id];
-          if (!answer || answer.value === undefined || answer.value === null || answer.value === '') return;
+          if (!answer || answer.value === undefined || answer.value === null || (typeof answer.value === 'string' && answer.value.trim() === '')) return;
+          
+          if (!scoreByTest[q.testId]) {
+              scoreByTest[q.testId] = 0;
+          }
 
           let isCorrect = false;
+          let questionScore = 0;
+
           if (q.type === 'single_choice' || q.type === 'numeric_input' || q.type === 'text_input') {
               const correctAnswers = q.correctAnswers as string[];
-              isCorrect = correctAnswers.length === 1 && String(answer.value).toLowerCase() === String(correctAnswers[0]).toLowerCase();
+              isCorrect = correctAnswers.length === 1 && String(answer.value).toLowerCase().trim() === String(correctAnswers[0]).toLowerCase().trim();
               if (isCorrect) {
-                  calculatedScore += q.points;
+                  questionScore = q.points;
               }
           } else if (q.type === 'multiple_choice') {
               const studentAnswers = (Array.isArray(answer.value) ? answer.value : []).sort();
               const correctAnswers = [...(q.correctAnswers as string[])].sort();
               isCorrect = studentAnswers.length === correctAnswers.length && studentAnswers.every((val, index) => val === correctAnswers[index]);
               if (isCorrect) {
-                  calculatedScore += q.points;
+                  questionScore = q.points;
               }
           } else if (q.type === 'matching') {
               const studentMatches = answer.value as Record<string, string>; // { promptId: optionId }
@@ -264,20 +279,26 @@ export default function SessionPage({
                       }
                   }
                   // Award points for each correct match (partial scoring)
-                  const pointsPerMatch = q.points / correctMatches.length;
-                  calculatedScore += correctCount * pointsPerMatch;
+                  if (correctMatches.length > 0) {
+                    const pointsPerMatch = q.points / correctMatches.length;
+                    questionScore = correctCount * pointsPerMatch;
+                  }
               }
           }
+
+          calculatedScore += questionScore;
+          scoreByTest[q.testId] += questionScore;
       });
       
       const attemptRef = doc(firestore, "attempts", attempt.id);
       await updateDoc(attemptRef, {
           status: 'finished',
           finishedAt: serverTimestamp(),
-          totalScore: Math.round(calculatedScore), // Round to nearest integer
+          totalScore: Math.round(calculatedScore),
+          scoreByTest: scoreByTest,
       });
 
-      setAttempt(prev => prev ? { ...prev, status: 'finished', totalScore: Math.round(calculatedScore) } : null);
+      setAttempt(prev => prev ? { ...prev, status: 'finished', totalScore: Math.round(calculatedScore), scoreByTest } : null);
       setIsFinishing(false);
 
   }, [attempt, currentAnswers, allQuestions, firestore, isFinishing]);
@@ -291,12 +312,24 @@ export default function SessionPage({
   }, [session, attempt?.status, finishAttempt]);
 
 
+  const questionsForActiveTest = useMemo(() => {
+    return allQuestions.filter(q => q.testId === activeTestId);
+  }, [allQuestions, activeTestId]);
+
   const activeQuestion = allQuestions[activeQuestionIndex];
-  const unansweredQuestions = allQuestions.length - Object.values(currentAnswers).filter(a => a.value !== undefined && a.value !== '' && (Array.isArray(a.value) ? a.value.length > 0 : Object.keys(a.value || {}).length > 0)).length;
+  
+  const unansweredQuestions = allQuestions.length - Object.keys(currentAnswers).filter(key => {
+    const answer = currentAnswers[key];
+    if (answer.value === undefined || answer.value === null) return false;
+    if (typeof answer.value === 'string' && answer.value.trim() === '') return false;
+    if (Array.isArray(answer.value) && answer.value.length === 0) return false;
+    if (typeof answer.value === 'object' && !Array.isArray(answer.value) && Object.keys(answer.value).length === 0) return false;
+    return true;
+  }).length;
 
 
   // Loading and initial states
-  if (isLoading || loadingSession || (session && tests.length === 0 && session.testIds.length > 0)) {
+  if (isLoading || loadingSession) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Loader2 className="h-16 w-16 animate-spin text-primary" />
@@ -343,42 +376,53 @@ export default function SessionPage({
   return (
     <div className="flex flex-col h-screen">
        {/* Header */}
-        <header className="flex h-16 items-center justify-between border-b px-6 shrink-0">
+        <header className="flex h-16 items-center justify-between border-b px-6 shrink-0 gap-4">
             <h1 className="text-xl font-semibold truncate" title={session.title}>{session.title}</h1>
+             <div className="flex gap-4">
+                {tests.map(test => (
+                    <Button 
+                        key={test.id} 
+                        variant={activeTestId === test.id ? "secondary" : "ghost"}
+                        onClick={() => {
+                            setActiveTestId(test.id);
+                            const firstQuestionIndexOfTest = allQuestions.findIndex(q => q.testId === test.id);
+                            setActiveQuestionIndex(firstQuestionIndexOfTest >= 0 ? firstQuestionIndexOfTest : 0);
+                        }}
+                    >
+                        {test.subjectName}
+                    </Button>
+                ))}
+            </div>
             <SessionTimer session={session} />
         </header>
 
         <div className="flex flex-1 overflow-hidden">
              {/* Left Panel: Question List */}
             <aside className="w-72 border-r overflow-y-auto p-4 flex flex-col">
-                {tests.map(test => (
-                    <div key={test.id} className="mb-4">
-                        <h3 className="font-semibold text-md mb-2">{test.title}</h3>
-                        <div className="grid grid-cols-5 gap-2">
-                           {allQuestions.filter(q => q.testId === test.id).map(q => {
-                               const qIndex = allQuestions.findIndex(aq => aq.id === q.id);
-                               const answer = currentAnswers[q.id];
-                               const isAnswered = answer?.value !== undefined && answer?.value !== '' && (Array.isArray(answer.value) ? answer.value.length > 0 : (typeof answer.value === 'object' && Object.keys(answer.value || {}).length > 0));
-                               return (
-                                <button
-                                key={q.id}
-                                onClick={() => setActiveQuestionIndex(qIndex)}
-                                className={`flex items-center justify-center h-10 w-10 rounded-md border text-sm font-medium transition-colors ${activeQuestionIndex === qIndex ? 'bg-primary text-primary-foreground' : isAnswered ? 'bg-secondary' : 'hover:bg-accent'}`}
-                                >
-                                {q.localIndex}
-                                </button>
-                               )
-                           })}
-                        </div>
-                    </div>
-                ))}
+                 <h3 className="font-semibold text-md mb-2">{tests.find(t => t.id === activeTestId)?.title}</h3>
+                 <div className="grid grid-cols-5 gap-2">
+                    {questionsForActiveTest.map(q => {
+                        const qIndex = allQuestions.findIndex(aq => aq.id === q.id);
+                        const answer = currentAnswers[q.id];
+                        const isAnswered = answer?.value !== undefined && answer.value !== null && answer.value !== '' && (Array.isArray(answer.value) ? answer.value.length > 0 : (typeof answer.value === 'object' ? Object.keys(answer.value).length > 0 : true));
+                        return (
+                        <button
+                        key={q.id}
+                        onClick={() => setActiveQuestionIndex(qIndex)}
+                        className={`flex items-center justify-center h-10 w-10 rounded-md border text-sm font-medium transition-colors ${activeQuestionIndex === qIndex ? 'bg-primary text-primary-foreground' : isAnswered ? 'bg-secondary' : 'hover:bg-accent'}`}
+                        >
+                        {q.localIndex}
+                        </button>
+                        )
+                    })}
+                </div>
             </aside>
             
             {/* Main Panel: Active Question */}
             {activeQuestion ? (
                 <main className="flex-1 flex flex-col overflow-hidden">
                     <div className="p-6 overflow-y-auto flex-1">
-                        <p className="text-sm text-muted-foreground mb-4">Питання {activeQuestion.localIndex} з {(tests.find(t => t.id === activeQuestion.testId)?.questions || []).length}</p>
+                        <p className="text-sm text-muted-foreground mb-4">Питання {activeQuestion.localIndex} з {questionsForActiveTest.length}</p>
                         
                         {activeQuestion.imageUrl && (
                             <div className="mb-4 relative h-64 w-full">
@@ -395,6 +439,7 @@ export default function SessionPage({
                                 value={currentAnswers[activeQuestion.id]?.value}
                                 onValueChange={(value) => handleAnswerChange(activeQuestion, value)}
                                 className="space-y-2"
+                                disabled={session.isPaused}
                             >
                                 {activeQuestion.options.map(opt => (
                                     <div key={opt.id} className="flex items-center space-x-3">
@@ -422,6 +467,7 @@ export default function SessionPage({
                                                         : currentSelection.filter((id: string) => id !== opt.id);
                                                     handleAnswerChange(activeQuestion, newSelection);
                                                 }}
+                                                disabled={session.isPaused}
                                             />
                                             <Label htmlFor={opt.id} className="text-base font-normal">
                                                 <KatexRenderer content={opt.text} />
@@ -453,6 +499,7 @@ export default function SessionPage({
                                              <Select
                                                 value={currentSelection[prompt.id] || ""}
                                                 onValueChange={(value) => handleAnswerChange(activeQuestion, `${prompt.id}:${value}`)}
+                                                disabled={session.isPaused}
                                              >
                                                 <SelectTrigger className="w-20">
                                                     <SelectValue placeholder="-" />
@@ -488,6 +535,7 @@ export default function SessionPage({
                                 className="max-w-xs"
                                 value={currentAnswers[activeQuestion.id]?.value || ''}
                                 onChange={(e) => handleAnswerChange(activeQuestion, e.target.value)}
+                                disabled={session.isPaused}
                             />
                          )}
 
@@ -496,6 +544,7 @@ export default function SessionPage({
                                 value={currentAnswers[activeQuestion.id]?.value || ''}
                                 onChange={(e) => handleAnswerChange(activeQuestion, e.target.value)}
                                 rows={4}
+                                disabled={session.isPaused}
                             />
                          )}
 
@@ -505,14 +554,14 @@ export default function SessionPage({
                          <Button
                             variant="outline"
                             onClick={() => setActiveQuestionIndex(p => Math.max(0, p - 1))}
-                            disabled={activeQuestionIndex === 0}
+                            disabled={activeQuestionIndex === 0 || session.isPaused}
                          >
                             <ChevronLeft className="mr-2 h-4 w-4" /> Попереднє питання
                          </Button>
                          
                          <AlertDialog>
                             <AlertDialogTrigger asChild>
-                                 <Button variant="destructive" disabled={isFinishing}>
+                                 <Button variant="destructive" disabled={isFinishing || session.isPaused}>
                                     {isFinishing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Send className="mr-2 h-4 w-4" />}
                                     Завершити сесію
                                  </Button>
@@ -536,7 +585,7 @@ export default function SessionPage({
                          <Button
                             variant="outline"
                             onClick={() => setActiveQuestionIndex(p => Math.min(allQuestions.length - 1, p + 1))}
-                            disabled={activeQuestionIndex === allQuestions.length - 1}
+                            disabled={activeQuestionIndex === allQuestions.length - 1 || session.isPaused}
                          >
                             Наступне питання <ChevronRight className="ml-2 h-4 w-4" />
                          </Button>

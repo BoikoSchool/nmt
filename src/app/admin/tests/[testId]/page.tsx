@@ -8,7 +8,7 @@ import {
   orderBy,
 } from "firebase/firestore";
 import { useFirestore, useDoc, useCollection, useMemoFirebase } from "@/firebase";
-import { Test, Question, Subject } from "@/lib/types";
+import { Test, Question, Subject, CorrectMatch } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -145,23 +145,30 @@ export default function EditTestPage({ params }: { params: { testId: string } })
         
         if (!Array.isArray(questions)) throw new Error("JSON має бути масивом.");
         
+        // Detailed validation
         const isValid = questions.every(q => {
             if (!q.id || !q.questionText || !q.type || q.points === undefined || !q.correctAnswers) {
                 return false;
             }
             if (q.type === 'matching') {
-                if (!Array.isArray(q.matchPrompts) || !Array.isArray(q.options) || !Array.isArray(q.correctAnswers)) return false;
-                return q.correctAnswers.every((ans: any) => typeof ans === 'object' && ans.promptId && ans.optionId);
+                if (!Array.isArray(q.matchPrompts) || !Array.isArray(q.options) || !Array.isArray(q.correctAnswers)) {
+                    return false;
+                }
+                // Check correctAnswers structure for matching
+                return q.correctAnswers.every((ans: any) => 
+                    typeof ans === 'object' && ans.promptId && ans.optionId
+                );
             }
             // For other types, correctAnswers should be an array of strings
             if (['single_choice', 'multiple_choice', 'numeric_input', 'text_input'].includes(q.type)) {
               return Array.isArray(q.correctAnswers) && q.correctAnswers.every((ans: any) => typeof ans === 'string');
             }
-            return true;
+            // If type is unknown, fail validation
+            return false;
         });
 
         if (!isValid) {
-          throw new Error("Один або більше об'єктів питань мають невірну структуру.");
+          throw new Error("Один або більше об'єктів питань мають невірну структуру або непідтримуваний тип.");
         }
 
         updateDocumentNonBlocking(testRef, { questions });
