@@ -445,7 +445,7 @@ export default function EditTestPage({ params }: { params: { testId: string } })
                     />
                 </div>
                  <p className="text-sm text-muted-foreground pt-2">
-                    Примітка: опції та правильні відповіді можна буде редагувати у розширеному режимі (в майбутньому). Зараз їх можна задати через імпорт JSON.
+                    Примітка: опції та правильні відповіді можна задати через імпорт JSON. Редагування цих полів в інтерфейсі поки не підтримується.
                  </p>
                 <DialogFooter>
                     <DialogClose asChild><Button type="button" variant="outline">Скасувати</Button></DialogClose>
