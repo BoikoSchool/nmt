@@ -1,4 +1,4 @@
-import { Auth, User, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+import { Auth, User, signInWithPopup, GoogleAuthProvider, signOut } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { getSdks } from "@/firebase";
 
@@ -27,6 +27,20 @@ export const handleSignInWithGoogle = async (auth: Auth): Promise<User> => {
     throw error;
   }
 };
+
+/**
+ * Handles the sign-out process.
+ * @param auth The Firebase Auth instance.
+ */
+export const handleSignOut = async (auth: Auth): Promise<void> => {
+  try {
+    await signOut(auth);
+  } catch (error) {
+    console.error("Error during sign-out:", error);
+    throw error;
+  }
+};
+
 
 /**
  * Creates a new user document in Firestore or updates an existing one.
