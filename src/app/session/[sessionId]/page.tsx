@@ -27,11 +27,11 @@ import {
   AttemptAnswer,
   CorrectMatch,
 } from "@/lib/types";
-import { getDemoStudentId } from "@/lib/student";
 import { useDebouncedCallback } from "use-debounce";
 import Link from "next/link";
 import 'katex/dist/katex.min.css';
 import { KatexRenderer } from "@/components/shared/KatexRenderer";
+import { useAppUser } from "@/hooks/useAppUser";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -82,7 +82,7 @@ export default function SessionPage({
   const firestore = useFirestore();
 
   // State Management
-  const [studentId] = useState(getDemoStudentId);
+  const { firebaseUser, isLoading: isUserLoading } = useAppUser();
   const [tests, setTests] = useState<EnrichedTest[]>([]);
   const [allQuestions, setAllQuestions] = useState<EnrichedQuestion[]>([]);
   const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
@@ -160,7 +160,9 @@ export default function SessionPage({
 
   // Find or create an attempt for this student and session
   useEffect(() => {
-    if (!session || !studentId) return;
+    if (!session || !firebaseUser) return;
+    
+    const studentId = firebaseUser.uid;
 
     const attemptQuery = query(
       collection(firestore, "attempts"),
@@ -195,7 +197,7 @@ export default function SessionPage({
     };
 
     findOrCreateAttempt();
-  }, [session, studentId, sessionId, firestore]);
+  }, [session, firebaseUser, sessionId, firestore]);
   
   // Debounced answer saving
   const debouncedSaveAnswer = useDebouncedCallback(
@@ -328,7 +330,7 @@ export default function SessionPage({
 
 
   // Loading and initial states
-  if (isLoading || loadingSession) {
+  if (isLoading || loadingSession || isUserLoading) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Loader2 className="h-16 w-16 animate-spin text-primary" />
@@ -524,6 +526,7 @@ export default function SessionPage({
                                                     <SelectValue placeholder="-" />
                                                 </SelectTrigger>
                                                 <SelectContent>
+                                                    <SelectItem value="">-</SelectItem>
                                                     {activeQuestion.options!.map((opt, optIndex) => (
                                                         <SelectItem key={opt.id} value={opt.id}>
                                                             {"АБВГДЕЄЖ"[optIndex]}

@@ -14,9 +14,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Loader2, Play } from "lucide-react";
 import { SessionTimer } from "@/components/shared/SessionTimer";
+import { useAppUser } from "@/hooks/useAppUser";
 
 export default function StudentDashboard() {
   const firestore = useFirestore();
+  const { firebaseUser, isLoading: isUserLoading } = useAppUser();
   const [activeSession, setActiveSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -34,7 +36,7 @@ export default function StudentDashboard() {
   const { data: tests } = useCollection<Test>(testsCollection);
 
   useEffect(() => {
-    if (!sessionsQuery) return;
+    if (!sessionsQuery || isUserLoading) return;
 
     const unsubscribe = onSnapshot(sessionsQuery, (querySnapshot) => {
       const sessions: Session[] = [];
@@ -42,7 +44,6 @@ export default function StudentDashboard() {
         sessions.push({ id: doc.id, ...doc.data() } as Session);
       });
       
-      // Get the most recently created active session
       const latestSession = sessions.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis())[0] || null;
       setActiveSession(latestSession);
       setLoading(false);
@@ -52,14 +53,14 @@ export default function StudentDashboard() {
     });
 
     return () => unsubscribe();
-  }, [sessionsQuery]);
+  }, [sessionsQuery, isUserLoading]);
 
   const getTestTitles = (testIds: string[]) => {
       if (!tests) return 'Завантаження...';
       return testIds.map(id => tests.find(t => t.id === id)?.title || '').join(', ');
   }
 
-  if (loading) {
+  if (loading || isUserLoading) {
       return (
           <div className="flex justify-center items-center h-64">
               <Loader2 className="h-12 w-12 animate-spin text-muted-foreground" />

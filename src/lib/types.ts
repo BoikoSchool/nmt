@@ -1,5 +1,14 @@
 import { Timestamp } from "firebase/firestore";
 
+export interface AppUser {
+  id: string;
+  fullName: string;
+  email: string;
+  role: 'admin' | 'student';
+  class?: string | null;
+  createdAt: Timestamp;
+}
+
 export interface Subject {
   id: string;
   name: string;
@@ -32,6 +41,7 @@ export interface Question {
   type: QuestionType;
   points: number;
   imageUrl?: string;
+  testId?: string; // Added to simplify lookups
   // For single/multiple choice
   options?: QuestionOption[];
   // For matching
@@ -85,5 +95,4 @@ export interface Attempt {
   status: AttemptStatus;
   answers: Record<string, AttemptAnswer>; // Key is questionId
   scoreByTest: Record<string, number>; // Key is testId
-  totalScore: number;
 }
