@@ -17,7 +17,6 @@ import {
   useFirestore,
   useDoc,
   useMemoFirebase,
-  useCollection,
   updateDocumentNonBlocking,
 } from "@/firebase";
 import {
@@ -75,10 +74,11 @@ type EnrichedQuestion = Question & {
 
 
 export default function SessionPage({
-  params: { sessionId },
+  params,
 }: {
   params: { sessionId: string };
 }) {
+  const { sessionId } = params;
   const firestore = useFirestore();
 
   // State Management
