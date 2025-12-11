@@ -9,7 +9,7 @@ import {
   doc
 } from "firebase/firestore";
 import { useFirestore, useMemoFirebase, useCollection, useDoc } from "@/firebase";
-import { Session, Attempt, Test, Subject } from "@/lib/types";
+import { Session, Attempt, Test, Subject, AppUser } from "@/lib/types";
 import { convertToNmtScale, getMaxScoreForTest, generateResultsCsv } from "@/lib/scoring";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
@@ -47,6 +47,21 @@ export default function SessionResultsPage({ params }: { params: { sessionId: st
   );
   const { data: attempts, isLoading: loadingAttempts } = useCollection<Attempt>(attemptsQuery);
   
+  // Fetch users based on studentIds from attempts
+  const studentIds = useMemo(() => attempts?.map(a => a.studentId) || [], [attempts]);
+  const usersQuery = useMemoFirebase(() => {
+    if (studentIds.length === 0) return null;
+    return query(collection(firestore, "users"), where("__name__", "in", studentIds));
+  }, [firestore, studentIds]);
+  const { data: users, isLoading: loadingUsers } = useCollection<AppUser>(usersQuery);
+
+  const usersMap = useMemo(() => {
+    const map = new Map<string, AppUser>();
+    users?.forEach(u => map.set(u.id, u));
+    return map;
+  }, [users]);
+
+
   // Fetch tests and subjects to map IDs to names
   const testIds = useMemo(() => session?.testIds || [], [session]);
   const testsQuery = useMemoFirebase(() => {
@@ -110,7 +125,7 @@ export default function SessionResultsPage({ params }: { params: { sessionId: st
   };
 
 
-  const isLoading = loadingSession || loadingAttempts || loadingTests || loadingSubjects;
+  const isLoading = loadingSession || loadingAttempts || loadingTests || loadingSubjects || loadingUsers;
 
   if (isLoading) {
     return (
@@ -160,7 +175,7 @@ export default function SessionResultsPage({ params }: { params: { sessionId: st
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[25%]">ID Студента (демо)</TableHead>
+                <TableHead className="w-[25%]">Студент</TableHead>
                 <TableHead>Статус</TableHead>
                 <TableHead>Результати по тестах</TableHead>
                 <TableHead>Рейтинг (100-200)</TableHead>
@@ -175,44 +190,47 @@ export default function SessionResultsPage({ params }: { params: { sessionId: st
                   </TableCell>
                 </TableRow>
               ) : (
-                attempts.map(attempt => (
-                  <TableRow key={attempt.id}>
-                    <TableCell className="font-mono text-xs">{attempt.studentId}</TableCell>
-                    <TableCell>{attempt.status === 'finished' ? 'Завершено' : 'В процесі'}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-col gap-1">
-                        {Object.entries(attempt.scoreByTest).map(([testId, score]) => {
-                          const test = testsMap.get(testId);
-                          const subject = test ? subjectsMap.get(test.subjectId) : null;
-                          return (
-                            <div key={testId} className="text-sm whitespace-nowrap">
-                                <span className="font-medium">{subject?.name || 'Невідомий'}:</span>{' '}
-                                {score as number} / {getMaxScoreForTest(test)}
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                       <div className="flex flex-col gap-1">
-                        {Object.entries(attempt.scoreByTest).map(([testId, score]) => {
-                          const test = testsMap.get(testId);
-                          const maxScore = getMaxScoreForTest(test);
-                          return (
-                            <div key={testId} className="text-sm font-semibold whitespace-nowrap">
-                                {convertToNmtScale(score as number, maxScore)}
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {attempt.finishedAt 
-                        ? formatDistanceToNow(attempt.finishedAt.toDate(), { addSuffix: true, locale: uk })
-                        : '-'}
-                    </TableCell>
-                  </TableRow>
-                ))
+                attempts.map(attempt => {
+                    const user = usersMap.get(attempt.studentId);
+                    return (
+                        <TableRow key={attempt.id}>
+                        <TableCell className="font-medium">{user?.email || attempt.studentId}</TableCell>
+                        <TableCell>{attempt.status === 'finished' ? 'Завершено' : 'В процесі'}</TableCell>
+                        <TableCell>
+                        <div className="flex flex-col gap-1">
+                            {Object.entries(attempt.scoreByTest).map(([testId, score]) => {
+                            const test = testsMap.get(testId);
+                            const subject = test ? subjectsMap.get(test.subjectId) : null;
+                            return (
+                                <div key={testId} className="text-sm whitespace-nowrap">
+                                    <span className="font-medium">{subject?.name || 'Невідомий'}:</span>{' '}
+                                    {score as number} / {getMaxScoreForTest(test)}
+                                </div>
+                            )
+                            })}
+                        </div>
+                        </TableCell>
+                        <TableCell>
+                        <div className="flex flex-col gap-1">
+                            {Object.entries(attempt.scoreByTest).map(([testId, score]) => {
+                            const test = testsMap.get(testId);
+                            const maxScore = getMaxScoreForTest(test);
+                            return (
+                                <div key={testId} className="text-sm font-semibold whitespace-nowrap">
+                                    {convertToNmtScale(score as number, maxScore)}
+                                </div>
+                            )
+                            })}
+                        </div>
+                        </TableCell>
+                        <TableCell>
+                        {attempt.finishedAt 
+                            ? formatDistanceToNow(attempt.finishedAt.toDate(), { addSuffix: true, locale: uk })
+                            : '-'}
+                        </TableCell>
+                    </TableRow>
+                  )
+                })
               )}
             </TableBody>
           </Table>
