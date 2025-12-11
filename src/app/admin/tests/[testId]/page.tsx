@@ -9,7 +9,7 @@ import {
   orderBy,
 } from "firebase/firestore";
 import { useFirestore, useDoc, useCollection, useMemoFirebase } from "@/firebase";
-import { Test, Question, Subject, QuestionType } from "@/lib/types";
+import { Test, Question, Subject } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -56,6 +56,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useToast } from "@/hooks/use-toast";
 import { updateDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import { Badge } from "@/components/ui/badge";
+import { QuestionType } from "@/lib/types";
 
 // Schemas
 const testDetailsSchema = z.object({
@@ -74,8 +75,7 @@ const questionSchema = z.object({
 type QuestionFormData = z.infer<typeof questionSchema>;
 
 
-export default function EditTestPage({ params }: { params: { testId: string } }) {
-  const { testId } = params;
+export default function EditTestPage({ params: { testId } }: { params: { testId: string } }) {
   const firestore = useFirestore();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -116,12 +116,14 @@ export default function EditTestPage({ params }: { params: { testId: string } })
   }, [test, testDetailsForm]);
 
   const handleUpdateTestDetails = async (data: TestDetailsFormData) => {
+    if (!testRef) return;
     updateDocumentNonBlocking(testRef, data);
     toast({ title: "Інформацію про тест оновлено." });
   };
 
   // JSON Import/Export
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!testRef) return;
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -134,7 +136,7 @@ export default function EditTestPage({ params }: { params: { testId: string } })
         
         // Basic validation
         if (!Array.isArray(questions)) throw new Error("JSON має бути масивом.");
-        if (questions.some(q => !q.id || !q.questionText || !q.type || !q.points || !q.correctAnswers)) {
+        if (questions.some(q => !q.id || !q.questionText || !q.type || q.points === undefined || !q.correctAnswers)) {
           throw new Error("Один або більше об'єктів питань мають невірну структуру.");
         }
 
@@ -151,7 +153,7 @@ export default function EditTestPage({ params }: { params: { testId: string } })
   };
 
   const handleExport = () => {
-    if (!test) return;
+    if (!test || !test.questions) return;
     const jsonString = JSON.stringify(test.questions, null, 2);
     const blob = new Blob([jsonString], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -160,7 +162,7 @@ export default function EditTestPage({ params }: { params: { testId: string } })
     a.href = url;
     a.download = `test_${safeTitle}_${testId}.json`;
     document.body.appendChild(a);
-a.click();
+    a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     toast({ title: "Питання експортовано." });
@@ -187,11 +189,11 @@ a.click();
   };
 
   const handleSaveQuestion = (data: QuestionFormData) => {
-    if (!test) return;
+    if (!test || !testRef) return;
     let updatedQuestions: Question[];
 
     if (selectedQuestion) { // Editing existing
-        updatedQuestions = test.questions.map(q => 
+        updatedQuestions = (test.questions || []).map(q => 
             q.id === selectedQuestion.id ? { ...selectedQuestion, ...data } : q
         );
     } else { // Adding new
@@ -202,7 +204,7 @@ a.click();
             options: data.type.includes('choice') ? [] : undefined,
             correctAnswers: [], 
         };
-        updatedQuestions = [...test.questions, newQuestion];
+        updatedQuestions = [...(test.questions || []), newQuestion];
     }
     
     updateDocumentNonBlocking(testRef, { questions: updatedQuestions });
@@ -211,8 +213,8 @@ a.click();
   };
 
   const handleDeleteQuestion = (questionId: string) => {
-    if(!test) return;
-    const updatedQuestions = test.questions.filter(q => q.id !== questionId);
+    if(!test || !testRef) return;
+    const updatedQuestions = (test.questions || []).filter(q => q.id !== questionId);
     updateDocumentNonBlocking(testRef, { questions: updatedQuestions });
     toast({ title: "Питання видалено" });
   };
@@ -304,7 +306,7 @@ a.click();
         <CardHeader>
             <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                    <CardTitle>Керування питаннями ({test.questions.length})</CardTitle>
+                    <CardTitle>Керування питаннями ({test.questions?.length || 0})</CardTitle>
                     <CardDescription>Імпортуйте, експортуйте або редагуйте питання вручну.</CardDescription>
                 </div>
                  <div className="flex flex-wrap gap-2">
@@ -331,7 +333,7 @@ a.click();
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {test.questions.length > 0 ? (
+                        {test.questions && test.questions.length > 0 ? (
                             test.questions.map(q => (
                                 <TableRow key={q.id}>
                                     <TableCell className="font-mono text-xs">{q.id}</TableCell>
