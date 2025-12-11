@@ -1,19 +1,18 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
+import Link from 'next/link';
 import {
   collection,
   query,
   where,
   onSnapshot,
-  Timestamp,
-  doc,
 } from "firebase/firestore";
 import { useFirestore, useMemoFirebase, useCollection } from "@/firebase";
 import { Session, Test } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, Clock, Pause, Play } from "lucide-react";
+import { Loader2, Play } from "lucide-react";
 import { SessionTimer } from "@/components/shared/SessionTimer";
 
 export default function StudentDashboard() {
@@ -103,9 +102,11 @@ export default function StudentDashboard() {
                   )}
               </CardContent>
               <CardFooter>
-                  <Button className="w-full" disabled={activeSession.isPaused}>
-                    <Play className="mr-2 h-4 w-4"/>
-                    Перейти до тестування
+                  <Button className="w-full" disabled={activeSession.isPaused} asChild>
+                    <Link href={`/session/${activeSession.id}`}>
+                      <Play className="mr-2 h-4 w-4"/>
+                      Перейти до тестування
+                    </Link>
                   </Button>
               </CardFooter>
           </Card>

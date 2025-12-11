@@ -51,3 +51,24 @@ export interface Session {
     pausedAt: Timestamp | null;
     createdAt: Timestamp;
 }
+
+// ================== Attempt Types ==================
+export type AttemptStatus = 'in_progress' | 'finished';
+
+export interface AttemptAnswer {
+  value: any; // string for single_choice/numeric/text, string[] for multiple_choice
+  testId: string;
+  subjectId: string;
+}
+
+export interface Attempt {
+  id: string;
+  sessionId: string;
+  studentId: string;
+  startedAt: Timestamp;
+  finishedAt: Timestamp | null;
+  status: AttemptStatus;
+  answers: Record<string, AttemptAnswer>; // Key is questionId
+  scoreByTest: Record<string, number>; // Key is testId
+  totalScore: number;
+}
