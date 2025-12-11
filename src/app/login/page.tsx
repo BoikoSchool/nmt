@@ -29,6 +29,7 @@ export default function LoginPage() {
   }, [appUser, isLoading, router]);
 
   const onSignIn = async () => {
+    if(!auth) return;
     setIsSigningIn(true);
     try {
       const resultUser = await handleSignInWithGoogle(auth);
@@ -46,12 +47,13 @@ export default function LoginPage() {
         title: 'Помилка входу',
         description: 'Не вдалося увійти через Google. Спробуйте ще раз.',
       });
+    } finally {
       setIsSigningIn(false);
     }
   };
   
-  // If we are still checking the user state, show a loading spinner
-  if (isLoading || isSigningIn) {
+  // If we are still checking the user state, or a sign-in is in progress, or user exists (and we're about to redirect) show a loading spinner
+  if (isLoading || isSigningIn || appUser) {
     return (
         <main className="flex min-h-screen flex-col items-center justify-center">
             <Loader2 className="h-16 w-16 animate-spin text-primary" />
@@ -60,44 +62,35 @@ export default function LoginPage() {
   }
 
   // If user is not logged in, show the login page
-  if (!appUser) {
-    return (
-      <main className="flex min-h-screen flex-col items-center justify-center bg-background p-4 sm:p-8">
-        <div className="w-full max-w-md text-center">
-           <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl md:text-6xl font-headline">
-              НМТ Demo
-            </h1>
-            <p className="mt-4 max-w-2xl mx-auto text-lg text-muted-foreground">
-              Платформа для підготовки до національного мультипредметного тесту.
-            </p>
-
-          <Card className="mt-12 text-left">
-            <CardHeader>
-              <CardTitle>Вхід в систему</CardTitle>
-              <CardDescription>
-                Для доступу до платформи, будь ласка, увійдіть за допомогою вашого Google акаунта.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button onClick={onSignIn} className="w-full" disabled={isSigningIn}>
-                {isSigningIn ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Chrome className="mr-2 h-4 w-4" />
-                )}
-                Увійти через Google
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </main>
-    );
-  }
-
-  // Fallback for when user is logged in but redirection hasn't happened yet
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center">
-        <Loader2 className="h-16 w-16 animate-spin text-primary" />
+    <main className="flex min-h-screen flex-col items-center justify-center bg-background p-4 sm:p-8">
+      <div className="w-full max-w-md text-center">
+          <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl md:text-6xl font-headline">
+            НМТ Demo
+          </h1>
+          <p className="mt-4 max-w-2xl mx-auto text-lg text-muted-foreground">
+            Платформа для підготовки до національного мультипредметного тесту.
+          </p>
+
+        <Card className="mt-12 text-left">
+          <CardHeader>
+            <CardTitle>Вхід в систему</CardTitle>
+            <CardDescription>
+              Для доступу до платформи, будь ласка, увійдіть за допомогою вашого Google акаунта.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={onSignIn} className="w-full" disabled={isSigningIn}>
+              {isSigningIn ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Chrome className="mr-2 h-4 w-4" />
+              )}
+              Увійти через Google
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
     </main>
   );
 }

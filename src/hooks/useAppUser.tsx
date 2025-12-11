@@ -23,10 +23,11 @@ export const useAppUser = () => {
   }, [firestore, firebaseUser]);
   
   // Use the useDoc hook to fetch the app-specific user data
-  const { data: appUser, isLoading: isAppUserLoading } = useDoc<AppUser>(userDocRef);
+  const { data: appUser, isLoading: isAppUserLoading, error: appUserError } = useDoc<AppUser>(userDocRef);
 
-  // The overall loading state is true if either the Firebase user or the app user data is loading.
-  const isLoading = isFirebaseUserLoading || (firebaseUser && isAppUserLoading);
+  // The overall loading state is true if either the Firebase user is loading,
+  // or if we have a Firebase user but are still waiting for their Firestore document.
+  const isLoading = isFirebaseUserLoading || (!!firebaseUser && isAppUserLoading);
 
   return {
     firebaseUser,
