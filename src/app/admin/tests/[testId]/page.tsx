@@ -143,7 +143,6 @@ export default function EditTestPage({ params }: { params: { testId: string } })
         if (typeof content !== 'string') throw new Error("Не вдалося прочитати файл.");
         const questions = JSON.parse(content);
         
-        // Basic validation
         if (!Array.isArray(questions)) throw new Error("JSON має бути масивом.");
         
         const isValid = questions.every(q => {
@@ -153,6 +152,10 @@ export default function EditTestPage({ params }: { params: { testId: string } })
             if (q.type === 'matching') {
                 if (!Array.isArray(q.matchPrompts) || !Array.isArray(q.options) || !Array.isArray(q.correctAnswers)) return false;
                 return q.correctAnswers.every((ans: any) => typeof ans === 'object' && ans.promptId && ans.optionId);
+            }
+            // For other types, correctAnswers should be an array of strings
+            if (['single_choice', 'multiple_choice', 'numeric_input', 'text_input'].includes(q.type)) {
+              return Array.isArray(q.correctAnswers) && q.correctAnswers.every((ans: any) => typeof ans === 'string');
             }
             return true;
         });
@@ -166,7 +169,6 @@ export default function EditTestPage({ params }: { params: { testId: string } })
       } catch (error: any) {
         toast({ variant: "destructive", title: "Помилка імпорту!", description: error.message });
       } finally {
-        // Reset file input
         if(fileInputRef.current) fileInputRef.current.value = "";
       }
     };

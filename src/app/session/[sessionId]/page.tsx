@@ -208,7 +208,22 @@ export default function SessionPage({
     const questionId = question.id;
     const newAnswers = { ...currentAnswers };
     const enrichedQuestion = question as EnrichedQuestion;
-    newAnswers[questionId] = { value, testId: enrichedQuestion.testId, subjectId: enrichedQuestion.subjectId };
+
+    const currentAnswer = newAnswers[questionId] || { value: {}, testId: enrichedQuestion.testId, subjectId: enrichedQuestion.subjectId };
+
+    if (question.type === 'matching') {
+        const [promptId, optionId] = value.split(':');
+        const newMatchingValue = { ...(currentAnswer.value || {}) };
+        if (optionId) {
+            newMatchingValue[promptId] = optionId;
+        } else {
+            delete newMatchingValue[promptId];
+        }
+        newAnswers[questionId] = { ...currentAnswer, value: newMatchingValue };
+    } else {
+        newAnswers[questionId] = { ...currentAnswer, value };
+    }
+    
     setCurrentAnswers(newAnswers);
     debouncedSaveAnswer(questionId, newAnswers[questionId]);
   };
@@ -232,7 +247,7 @@ export default function SessionPage({
               }
           } else if (q.type === 'multiple_choice') {
               const studentAnswers = (Array.isArray(answer.value) ? answer.value : []).sort();
-              const correctAnswers = [...q.correctAnswers as string[]].sort();
+              const correctAnswers = [...(q.correctAnswers as string[])].sort();
               isCorrect = studentAnswers.length === correctAnswers.length && studentAnswers.every((val, index) => val === correctAnswers[index]);
               if (isCorrect) {
                   calculatedScore += q.points;
@@ -277,7 +292,7 @@ export default function SessionPage({
 
 
   const activeQuestion = allQuestions[activeQuestionIndex];
-  const unansweredQuestions = allQuestions.length - Object.values(currentAnswers).filter(a => a.value !== undefined && a.value !== '' && a.value?.length !== 0).length;
+  const unansweredQuestions = allQuestions.length - Object.values(currentAnswers).filter(a => a.value !== undefined && a.value !== '' && (Array.isArray(a.value) ? a.value.length > 0 : Object.keys(a.value || {}).length > 0)).length;
 
 
   // Loading and initial states
@@ -343,7 +358,7 @@ export default function SessionPage({
                            {allQuestions.filter(q => q.testId === test.id).map(q => {
                                const qIndex = allQuestions.findIndex(aq => aq.id === q.id);
                                const answer = currentAnswers[q.id];
-                               const isAnswered = answer?.value !== undefined && answer?.value !== '' && (Array.isArray(answer.value) ? answer.value.length > 0 : Object.keys(answer.value || {}).length > 0);
+                               const isAnswered = answer?.value !== undefined && answer?.value !== '' && (Array.isArray(answer.value) ? answer.value.length > 0 : (typeof answer.value === 'object' && Object.keys(answer.value || {}).length > 0));
                                return (
                                 <button
                                 key={q.id}
@@ -437,15 +452,7 @@ export default function SessionPage({
                                         <div key={prompt.id} className="flex items-center gap-4 h-10">
                                              <Select
                                                 value={currentSelection[prompt.id] || ""}
-                                                onValueChange={(value) => {
-                                                    const newSelection = {...currentSelection};
-                                                    if (value) {
-                                                        newSelection[prompt.id] = value;
-                                                    } else {
-                                                        delete newSelection[prompt.id];
-                                                    }
-                                                    handleAnswerChange(activeQuestion, newSelection);
-                                                }}
+                                                onValueChange={(value) => handleAnswerChange(activeQuestion, `${prompt.id}:${value}`)}
                                              >
                                                 <SelectTrigger className="w-20">
                                                     <SelectValue placeholder="-" />
