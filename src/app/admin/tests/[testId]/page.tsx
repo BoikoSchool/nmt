@@ -102,6 +102,11 @@ export default function EditTestPage({ params: { testId } }: { params: { testId:
 
   const questionForm = useForm<QuestionFormData>({
     resolver: zodResolver(questionSchema),
+    defaultValues: {
+        questionText: '',
+        type: 'single_choice',
+        points: 1,
+    }
   });
 
   // Populate forms with fetched data
