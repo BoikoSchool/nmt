@@ -75,11 +75,10 @@ type EnrichedQuestion = Question & {
 
 
 export default function SessionPage({
-  params,
+  params: { sessionId },
 }: {
   params: { sessionId: string };
 }) {
-  const { sessionId } = params;
   const firestore = useFirestore();
 
   // State Management
