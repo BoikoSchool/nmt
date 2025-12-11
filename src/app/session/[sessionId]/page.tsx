@@ -558,7 +558,7 @@ export default function SessionPage({
                             <Input
                                 key={activeQuestion.id}
                                 type="number"
-                                className="max-w-xs"
+                                className="max-w-xs bg-white"
                                 value={currentAnswers[activeQuestion.id]?.value ?? ''}
                                 onChange={(e) => handleAnswerChange(activeQuestion, e.target.value)}
                                 disabled={session.isPaused}
@@ -571,6 +571,7 @@ export default function SessionPage({
                                 value={currentAnswers[activeQuestion.id]?.value ?? ''}
                                 onChange={(e) => handleAnswerChange(activeQuestion, e.target.value)}
                                 rows={4}
+                                className="bg-white"
                                 disabled={session.isPaused}
                             />
                          )}
