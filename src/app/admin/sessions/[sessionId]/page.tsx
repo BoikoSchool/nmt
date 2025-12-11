@@ -162,7 +162,6 @@ export default function SessionResultsPage({ params }: { params: { sessionId: st
               <TableRow>
                 <TableHead className="w-[25%]">ID Студента (демо)</TableHead>
                 <TableHead>Статус</TableHead>
-                <TableHead>Загальний бал</TableHead>
                 <TableHead>Результати по тестах</TableHead>
                 <TableHead>Рейтинг (100-200)</TableHead>
                 <TableHead>Час завершення</TableHead>
@@ -171,7 +170,7 @@ export default function SessionResultsPage({ params }: { params: { sessionId: st
             <TableBody>
               {(!attempts || attempts.length === 0) ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                  <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
                     Ще немає жодної спроби для цієї сесії.
                   </TableCell>
                 </TableRow>
@@ -180,7 +179,6 @@ export default function SessionResultsPage({ params }: { params: { sessionId: st
                   <TableRow key={attempt.id}>
                     <TableCell className="font-mono text-xs">{attempt.studentId}</TableCell>
                     <TableCell>{attempt.status === 'finished' ? 'Завершено' : 'В процесі'}</TableCell>
-                    <TableCell className="font-bold">{attempt.totalScore}</TableCell>
                     <TableCell>
                       <div className="flex flex-col gap-1">
                         {Object.entries(attempt.scoreByTest).map(([testId, score]) => {
