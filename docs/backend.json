@@ -1,0 +1,248 @@
+{
+  "entities": {
+    "Subject": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Subject",
+      "type": "object",
+      "description": "Represents a subject for the NMT demo platform.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the subject."
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the subject."
+        },
+        "description": {
+          "type": "string",
+          "description": "A brief description of the subject."
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "Test": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Test",
+      "type": "object",
+      "description": "Represents a test for the NMT demo platform.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the test."
+        },
+        "subjectId": {
+          "type": "string",
+          "description": "Reference to Subject. (Relationship: Subject 1:N Test)"
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the test."
+        },
+        "description": {
+          "type": "string",
+          "description": "A brief description of the test."
+        },
+        "questions": {
+          "type": "array",
+          "description": "A list of question ids which compose this test.",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "subjectId",
+        "name"
+      ]
+    },
+    "Session": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Session",
+      "type": "object",
+      "description": "Represents a session for the NMT demo platform.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the session."
+        },
+        "testId": {
+          "type": "string",
+          "description": "Reference to Test. (Relationship: Test 1:N Session)"
+        },
+        "startTime": {
+          "type": "string",
+          "description": "The date and time when the session started.",
+          "format": "date-time"
+        },
+        "endTime": {
+          "type": "string",
+          "description": "The date and time when the session ended.",
+          "format": "date-time"
+        },
+        "studentId": {
+          "type": "string",
+          "description": "Reference to Student. (Relationship: Student 1:N Session)"
+        },
+        "score": {
+          "type": "number",
+          "description": "The score the student got on the test"
+        }
+      },
+      "required": [
+        "id",
+        "testId",
+        "studentId",
+        "startTime"
+      ]
+    },
+    "Student": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Student",
+      "type": "object",
+      "description": "Represents a student for the NMT demo platform.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the student."
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the student."
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "Question": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Question",
+      "type": "object",
+      "description": "Represents a question in a test.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the question."
+        },
+        "text": {
+          "type": "string",
+          "description": "The text of the question."
+        },
+        "options": {
+          "type": "array",
+          "description": "Possible answer options for the question.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "correctAnswer": {
+          "type": "string",
+          "description": "The correct answer for the question."
+        }
+      },
+      "required": [
+        "id",
+        "text",
+        "options",
+        "correctAnswer"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/subjects/{subjectId}",
+        "definition": {
+          "entityName": "Subject",
+          "schema": {
+            "$ref": "#/backend/entities/Subject"
+          },
+          "description": "Stores subject data. ",
+          "params": [
+            {
+              "name": "subjectId",
+              "description": "The unique identifier for the subject."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/tests/{testId}",
+        "definition": {
+          "entityName": "Test",
+          "schema": {
+            "$ref": "#/backend/entities/Test"
+          },
+          "description": "Stores test data. Includes the subjectId to indicate which subject the test belongs to.",
+          "params": [
+            {
+              "name": "testId",
+              "description": "The unique identifier for the test."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/sessions/{sessionId}",
+        "definition": {
+          "entityName": "Session",
+          "schema": {
+            "$ref": "#/backend/entities/Session"
+          },
+          "description": "Stores session data, including references to the associated test and student.",
+          "params": [
+            {
+              "name": "sessionId",
+              "description": "The unique identifier for the session."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/students/{studentId}",
+        "definition": {
+          "entityName": "Student",
+          "schema": {
+            "$ref": "#/backend/entities/Student"
+          },
+          "description": "Stores student data.",
+          "params": [
+            {
+              "name": "studentId",
+              "description": "The unique identifier for the student."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/questions/{questionId}",
+        "definition": {
+          "entityName": "Question",
+          "schema": {
+            "$ref": "#/backend/entities/Question"
+          },
+          "description": "Stores question data.",
+          "params": [
+            {
+              "name": "questionId",
+              "description": "The unique identifier for the question."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "Given the requirement for a simplified development environment without authentication, the Firestore structure is designed to be straightforward and easily manageable.  Since authentication and granular access control are not immediate concerns, a flat structure is sufficient. However, the structure is designed with future scalability in mind.\n\nSubjects, Tests, Questions, Students and Sessions are stored in separate collections at the root level. This segregation supports QAPs by allowing simple, collection-level rules to be applied when security is implemented.\n\nSince there is no authentication, authorization independence is not explicitly enforced via denormalization. However, the structure anticipates future needs. For example, if roles are later introduced, properties like `studentId` within `sessions` can be used in rules after authentication is enabled.\n\nIn summary, this structure prioritizes simplicity for development while providing a solid foundation for more complex authorization and data relationships in the future. When the application progresses beyond the development environment, security rules can be refined to enforce proper access controls based on roles and user authentication, and denormalization can be implemented at that time to ensure Authorization Independence."
+  }
+}
