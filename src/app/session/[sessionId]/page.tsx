@@ -225,8 +225,6 @@ export default function SessionPage({
         if (optionId) {
             newMatchingValue[promptId] = optionId;
         } else {
-            // This case handles deselecting an option, though the current UI doesn't directly support it.
-            // It's good practice to keep it.
             delete newMatchingValue[promptId];
         }
         newAnswers[questionId] = { ...currentAnswer, value: newMatchingValue };
@@ -254,19 +252,18 @@ export default function SessionPage({
               scoreByTest[q.testId] = 0;
           }
 
-          let isCorrect = false;
           let questionScore = 0;
 
           if (q.type === 'single_choice' || q.type === 'numeric_input' || q.type === 'text_input') {
               const correctAnswers = q.correctAnswers as string[];
-              isCorrect = correctAnswers.length === 1 && String(answer.value).toLowerCase().trim() === String(correctAnswers[0]).toLowerCase().trim();
+              const isCorrect = correctAnswers.length === 1 && String(answer.value).toLowerCase().trim() === String(correctAnswers[0]).toLowerCase().trim();
               if (isCorrect) {
                   questionScore = q.points;
               }
           } else if (q.type === 'multiple_choice') {
               const studentAnswers = (Array.isArray(answer.value) ? answer.value : []).sort();
               const correctAnswers = [...(q.correctAnswers as string[])].sort();
-              isCorrect = studentAnswers.length === correctAnswers.length && studentAnswers.every((val, index) => val === correctAnswers[index]);
+              const isCorrect = studentAnswers.length === correctAnswers.length && studentAnswers.every((val, index) => val === correctAnswers[index]);
               if (isCorrect) {
                   questionScore = q.points;
               }
@@ -281,7 +278,6 @@ export default function SessionPage({
                           correctCount++;
                       }
                   }
-                  // Award points for each correct match (partial scoring)
                   if (correctMatches.length > 0) {
                     const pointsPerMatch = q.points / correctMatches.length;
                     questionScore = correctCount * pointsPerMatch;
@@ -496,7 +492,9 @@ export default function SessionPage({
                                {/* Selects (Middle) */}
                                <div className="flex flex-col gap-4">
                                 {activeQuestion.matchPrompts.map((prompt) => {
-                                    const currentSelection = (currentAnswers[activeQuestion.id]?.value as Record<string, string> | undefined) || {};
+                                    const answerObject = currentAnswers[activeQuestion.id]?.value;
+                                    const currentSelection = (typeof answerObject === 'object' && answerObject !== null && !Array.isArray(answerObject)) ? answerObject : {};
+
                                     return (
                                         <div key={prompt.id} className="flex items-center gap-4 h-10">
                                              <Select
@@ -603,5 +601,3 @@ export default function SessionPage({
     </div>
   );
 }
-
-    
