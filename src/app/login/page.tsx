@@ -13,20 +13,20 @@ import { useToast } from '@/hooks/use-toast';
 export default function LoginPage() {
   const auth = useAuth();
   const router = useRouter();
-  const { appUser, isLoading: isAppUserLoading } = useAppUser();
+  const { appUser, isLoading } = useAppUser();
   const [isSigningIn, setIsSigningIn] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
     // If user data is loaded and a user exists, redirect them based on their role
-    if (!isAppUserLoading && appUser) {
+    if (!isLoading && appUser) {
       if (appUser.role === 'admin') {
         router.push('/admin');
       } else {
         router.push('/student');
       }
     }
-  }, [appUser, isAppUserLoading, router]);
+  }, [appUser, isLoading, router]);
 
   const onSignIn = async () => {
     setIsSigningIn(true);
@@ -37,7 +37,7 @@ export default function LoginPage() {
           title: 'Вхід успішний!',
           description: `Вітаємо, ${resultUser.displayName}!`,
         });
-        // The useEffect will handle the redirection
+        // The useEffect will handle the redirection after appUser is loaded
       }
     } catch (error) {
       console.error('Google Sign-In Error:', error);
@@ -51,7 +51,7 @@ export default function LoginPage() {
   };
   
   // If we are still checking the user state, show a loading spinner
-  if (isAppUserLoading) {
+  if (isLoading || isSigningIn) {
     return (
         <main className="flex min-h-screen flex-col items-center justify-center">
             <Loader2 className="h-16 w-16 animate-spin text-primary" />
