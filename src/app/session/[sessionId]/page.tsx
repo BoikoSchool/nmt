@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import Image from "next/image";
 import {
   doc,
   collection,
@@ -10,6 +11,7 @@ import {
   serverTimestamp,
   writeBatch,
   addDoc,
+  updateDoc,
 } from "firebase/firestore";
 import {
   useFirestore,
@@ -25,10 +27,13 @@ import {
   Question,
   Attempt,
   AttemptAnswer,
+  MatchingOption,
 } from "@/lib/types";
 import { getDemoStudentId } from "@/lib/student";
 import { useDebouncedCallback } from "use-debounce";
 import Link from "next/link";
+import 'katex/dist/katex.min.css';
+import { KatexRenderer } from "@/components/shared/KatexRenderer";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -37,6 +42,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -60,6 +66,14 @@ import { SessionTimer } from "@/components/shared/SessionTimer";
 
 type EnrichedTest = Test & { subjectName: string };
 
+type EnrichedQuestion = Question & {
+    testId: string;
+    subjectId: string;
+    testTitle: string;
+    localIndex: number;
+};
+
+
 export default function SessionPage({
   params,
 }: {
@@ -71,7 +85,7 @@ export default function SessionPage({
   // State Management
   const [studentId] = useState(getDemoStudentId);
   const [tests, setTests] = useState<EnrichedTest[]>([]);
-  const [allQuestions, setAllQuestions] = useState<Question[]>([]);
+  const [allQuestions, setAllQuestions] = useState<EnrichedQuestion[]>([]);
   const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
   const [currentAnswers, setCurrentAnswers] = useState<
     Record<string, AttemptAnswer>
@@ -123,14 +137,16 @@ export default function SessionPage({
       enrichedTests.sort((a, b) => session.testIds.indexOf(a.id) - session.testIds.indexOf(b.id));
 
       const allQuestionsFromTests = enrichedTests.flatMap(t => 
-        t.questions.map(q => ({
+        (t.questions || []).map((q, index) => ({
           ...q,
-          // Add testId and subjectId to each question for context
           testId: t.id,
           subjectId: t.subjectId,
+          testTitle: t.title,
+          localIndex: index + 1,
         }))
       );
-      setAllQuestions(allQuestionsFromTests as Question[]);
+
+      setAllQuestions(allQuestionsFromTests as EnrichedQuestion[]);
       setTests(enrichedTests);
     };
 
@@ -192,7 +208,8 @@ export default function SessionPage({
   const handleAnswerChange = (question: Question, value: any) => {
     const questionId = question.id;
     const newAnswers = { ...currentAnswers };
-    newAnswers[questionId] = { value, testId: (question as any).testId, subjectId: (question as any).subjectId };
+    const enrichedQuestion = question as EnrichedQuestion;
+    newAnswers[questionId] = { value, testId: enrichedQuestion.testId, subjectId: enrichedQuestion.subjectId };
     setCurrentAnswers(newAnswers);
     debouncedSaveAnswer(questionId, newAnswers[questionId]);
   };
@@ -205,15 +222,29 @@ export default function SessionPage({
       let calculatedScore = 0;
       allQuestions.forEach(q => {
           const answer = currentAnswers[q.id];
-          if (!answer) return;
+          if (!answer || answer.value === undefined) return;
 
           let isCorrect = false;
           if (q.type === 'single_choice' || q.type === 'numeric_input' || q.type === 'text_input') {
-              isCorrect = q.correctAnswers.length === 1 && String(answer.value) === String(q.correctAnswers[0]);
+              isCorrect = q.correctAnswers.length === 1 && String(answer.value).toLowerCase() === String(q.correctAnswers[0]).toLowerCase();
           } else if (q.type === 'multiple_choice') {
               const studentAnswers = (Array.isArray(answer.value) ? answer.value : []).sort();
               const correctAnswers = [...q.correctAnswers].sort();
               isCorrect = studentAnswers.length === correctAnswers.length && studentAnswers.every((val, index) => val === correctAnswers[index]);
+          } else if (q.type === 'matching') {
+              const studentMatches = answer.value as Record<string, string>; // { leftId: rightId }
+              const correctMatches = q.correctAnswers.map(ca => ca.split(':')).reduce((acc, [left, right]) => ({ ...acc, [left]: right }), {} as Record<string, string>);
+              
+              let correctCount = 0;
+              for (const leftId in studentMatches) {
+                  if (correctMatches[leftId] === studentMatches[leftId]) {
+                      correctCount++;
+                  }
+              }
+              // For simplicity, grant points if all matches are correct
+              if(correctCount === q.correctAnswers.length) {
+                isCorrect = true;
+              }
           }
           if (isCorrect) {
               calculatedScore += q.points;
@@ -241,7 +272,7 @@ export default function SessionPage({
 
 
   const activeQuestion = allQuestions[activeQuestionIndex];
-  const unansweredQuestions = allQuestions.length - Object.keys(currentAnswers).length;
+  const unansweredQuestions = allQuestions.length - Object.values(currentAnswers).filter(a => a.value !== undefined && a.value !== '' && a.value?.length !== 0).length;
 
 
   // Loading and initial states
@@ -299,21 +330,21 @@ export default function SessionPage({
 
         <div className="flex flex-1 overflow-hidden">
              {/* Left Panel: Question List */}
-            <aside className="w-64 border-r overflow-y-auto p-4 flex flex-col">
+            <aside className="w-72 border-r overflow-y-auto p-4 flex flex-col">
                 {tests.map(test => (
                     <div key={test.id} className="mb-4">
-                        <h3 className="font-semibold text-sm mb-2">{test.title}</h3>
+                        <h3 className="font-semibold text-md mb-2">{test.title}</h3>
                         <div className="grid grid-cols-5 gap-2">
-                           {allQuestions.filter(q => (q as any).testId === test.id).map(q => {
+                           {allQuestions.filter(q => q.testId === test.id).map(q => {
                                const qIndex = allQuestions.findIndex(aq => aq.id === q.id);
-                               const isAnswered = !!currentAnswers[q.id];
+                               const isAnswered = currentAnswers[q.id]?.value !== undefined && currentAnswers[q.id]?.value !== '' && currentAnswers[q.id]?.value?.length !== 0;
                                return (
                                 <button
                                 key={q.id}
                                 onClick={() => setActiveQuestionIndex(qIndex)}
                                 className={`flex items-center justify-center h-10 w-10 rounded-md border text-sm font-medium transition-colors ${activeQuestionIndex === qIndex ? 'bg-primary text-primary-foreground' : isAnswered ? 'bg-secondary' : 'hover:bg-accent'}`}
                                 >
-                                {qIndex + 1}
+                                {q.localIndex}
                                 </button>
                                )
                            })}
@@ -326,31 +357,41 @@ export default function SessionPage({
             {activeQuestion ? (
                 <main className="flex-1 flex flex-col overflow-hidden">
                     <div className="p-6 overflow-y-auto flex-1">
-                        <p className="text-sm text-muted-foreground mb-4">Питання {activeQuestionIndex + 1} з {allQuestions.length}</p>
-                        <div className="prose prose-lg max-w-none whitespace-pre-wrap mb-6">
-                            {activeQuestion.questionText}
+                        <p className="text-sm text-muted-foreground mb-4">Питання {activeQuestion.localIndex} з {(tests.find(t => t.id === activeQuestion.testId)?.questions || []).length}</p>
+                        
+                        {activeQuestion.imageUrl && (
+                            <div className="mb-4 relative h-64 w-full">
+                                <Image src={activeQuestion.imageUrl} alt={`Зображення до питання ${activeQuestion.localIndex}`} layout="fill" objectFit="contain" />
+                            </div>
+                        )}
+
+                        <div className="prose prose-lg max-w-none mb-6 text-lg">
+                           <KatexRenderer content={activeQuestion.questionText} />
                         </div>
 
-                         {activeQuestion.type === 'single_choice' && (
+                         {activeQuestion.type === 'single_choice' && activeQuestion.options && (
                             <RadioGroup
                                 value={currentAnswers[activeQuestion.id]?.value}
                                 onValueChange={(value) => handleAnswerChange(activeQuestion, value)}
+                                className="space-y-2"
                             >
-                                {activeQuestion.options?.map(opt => (
-                                    <div key={opt.id} className="flex items-center space-x-2">
+                                {activeQuestion.options.map(opt => (
+                                    <div key={opt.id} className="flex items-center space-x-3">
                                         <RadioGroupItem value={opt.id} id={opt.id} />
-                                        <Label htmlFor={opt.id}>{opt.text}</Label>
+                                        <Label htmlFor={opt.id} className="text-base font-normal">
+                                            <KatexRenderer content={opt.text} />
+                                        </Label>
                                     </div>
                                 ))}
                             </RadioGroup>
                          )}
 
-                         {activeQuestion.type === 'multiple_choice' && (
+                         {activeQuestion.type === 'multiple_choice' && activeQuestion.options && (
                              <div className="space-y-2">
-                                {activeQuestion.options?.map(opt => {
-                                    const currentSelection = currentAnswers[activeQuestion.id]?.value || [];
+                                {activeQuestion.options.map(opt => {
+                                    const currentSelection = (currentAnswers[activeQuestion.id]?.value as string[] | undefined) || [];
                                     return (
-                                        <div key={opt.id} className="flex items-center space-x-2">
+                                        <div key={opt.id} className="flex items-center space-x-3">
                                             <Checkbox
                                                 id={opt.id}
                                                 checked={currentSelection.includes(opt.id)}
@@ -361,11 +402,67 @@ export default function SessionPage({
                                                     handleAnswerChange(activeQuestion, newSelection);
                                                 }}
                                             />
-                                            <Label htmlFor={opt.id}>{opt.text}</Label>
+                                            <Label htmlFor={opt.id} className="text-base font-normal">
+                                                <KatexRenderer content={opt.text} />
+                                            </Label>
                                         </div>
                                     )
                                 })}
                              </div>
+                         )}
+                         
+                         {activeQuestion.type === 'matching' && activeQuestion.matchingOptions && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                               <div className="flex flex-col gap-4">
+                                {activeQuestion.matchingOptions.map((opt, index) => (
+                                    <div key={opt.id} className="flex items-center gap-4">
+                                        <div className="flex items-center justify-center h-8 w-8 rounded-md bg-secondary font-bold">{index + 1}</div>
+                                        <div className="flex-1"><KatexRenderer content={opt.left} /></div>
+                                    </div>
+                                ))}
+                               </div>
+                               <div className="flex flex-col gap-4">
+                                {activeQuestion.matchingOptions.map((opt, index) => {
+                                    const currentSelection = (currentAnswers[activeQuestion.id]?.value as Record<string, string> | undefined) || {};
+                                    const rightOptions = activeQuestion.matchingOptions!.map(o => ({ id: o.id, text: o.right }));
+                                    const rightOptionLetters = "АБВГД".split('');
+
+                                    return (
+                                        <div key={opt.id} className="flex items-center gap-4">
+                                           <div className="font-bold">{index + 1}</div>
+                                           <div className="flex-1">
+                                             <Select
+                                                value={currentSelection[opt.id] || ""}
+                                                onValueChange={(value) => {
+                                                    const newSelection = {...currentSelection};
+                                                    if (value) {
+                                                        newSelection[opt.id] = value;
+                                                    } else {
+                                                        delete newSelection[opt.id];
+                                                    }
+                                                    handleAnswerChange(activeQuestion, newSelection);
+                                                }}
+                                             >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="-" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {rightOptions.map((rightOpt, rightIndex) => (
+                                                        <SelectItem key={rightOpt.id} value={rightOpt.id}>
+                                                            <div className="flex gap-2">
+                                                                <span>{rightOptionLetters[rightIndex]}</span>
+                                                                <KatexRenderer content={rightOpt.text} />
+                                                            </div>
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                             </Select>
+                                           </div>
+                                        </div>
+                                    )
+                                })}
+                               </div>
+                            </div>
                          )}
 
                           {activeQuestion.type === 'numeric_input' && (

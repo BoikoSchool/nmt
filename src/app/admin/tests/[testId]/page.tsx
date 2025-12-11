@@ -68,7 +68,7 @@ type TestDetailsFormData = z.infer<typeof testDetailsSchema>;
 
 const questionSchema = z.object({
   questionText: z.string().min(1, "Текст питання є обов'язковим."),
-  type: z.enum(['single_choice', 'multiple_choice', 'numeric_input', 'text_input']),
+  type: z.enum(['single_choice', 'multiple_choice', 'numeric_input', 'text_input', 'matching']),
   points: z.coerce.number().min(0, "Бали мають бути невід'ємним числом."),
   // Further validation for options and correctAnswers would be complex here, handled in logic
 });
@@ -98,6 +98,11 @@ export default function EditTestPage({ params: { testId } }: { params: { testId:
   // Forms
   const testDetailsForm = useForm<TestDetailsFormData>({
     resolver: zodResolver(testDetailsSchema),
+    defaultValues: {
+      title: "",
+      description: "",
+      subjectId: "",
+    }
   });
 
   const questionForm = useForm<QuestionFormData>({
@@ -207,6 +212,7 @@ export default function EditTestPage({ params: { testId } }: { params: { testId:
             ...data,
             // Provide defaults for fields not in the simple form
             options: data.type.includes('choice') ? [] : undefined,
+            matchingOptions: data.type === 'matching' ? [] : undefined,
             correctAnswers: [], 
         };
         updatedQuestions = [...(test.questions || []), newQuestion];
@@ -418,6 +424,7 @@ export default function EditTestPage({ params: { testId } }: { params: { testId:
                                         <SelectItem value="multiple_choice">Множинний вибір</SelectItem>
                                         <SelectItem value="numeric_input">Числова відповідь</SelectItem>
                                         <SelectItem value="text_input">Текстова відповідь</SelectItem>
+                                        <SelectItem value="matching">На відповідність</SelectItem>
                                     </SelectContent>
                                 </Select>
                                 <FormMessage />

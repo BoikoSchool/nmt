@@ -14,7 +14,13 @@ export interface QuestionOption {
   text: string;
 }
 
-export type QuestionType = 'single_choice' | 'multiple_choice' | 'numeric_input' | 'text_input';
+export interface MatchingOption {
+  id: string;
+  left: string;
+  right: string;
+}
+
+export type QuestionType = 'single_choice' | 'multiple_choice' | 'numeric_input' | 'text_input' | 'matching';
 
 export interface Question {
   id: string;
@@ -23,7 +29,8 @@ export interface Question {
   points: number;
   imageUrl?: string;
   options?: QuestionOption[];
-  correctAnswers: string[];
+  matchingOptions?: MatchingOption[];
+  correctAnswers: string[]; // For 'matching', format is "leftId:rightId"
 }
 
 export interface Test {
@@ -52,11 +59,11 @@ export interface Session {
     createdAt: Timestamp;
 }
 
-// ================== Attempt Types ==================
+// ================== Attempt Types =.================
 export type AttemptStatus = 'in_progress' | 'finished';
 
 export interface AttemptAnswer {
-  value: any; // string for single_choice/numeric/text, string[] for multiple_choice
+  value: any; // string for single_choice/numeric/text, string[] for multiple_choice, Record<string, string> for matching
   testId: string;
   subjectId: string;
 }
