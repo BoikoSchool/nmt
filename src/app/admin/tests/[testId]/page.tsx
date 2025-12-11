@@ -75,7 +75,8 @@ const questionSchema = z.object({
 type QuestionFormData = z.infer<typeof questionSchema>;
 
 
-export default function EditTestPage({ params: { testId } }: { params: { testId: string } }) {
+export default function EditTestPage({ params }: { params: { testId: string } }) {
+  const { testId } = params;
   const firestore = useFirestore();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -212,7 +213,7 @@ export default function EditTestPage({ params: { testId } }: { params: { testId:
             ...data,
             // Provide defaults for fields not in the simple form
             options: data.type.includes('choice') ? [] : undefined,
-            matchingOptions: data.type === 'matching' ? [] : undefined,
+            matchPrompts: data.type === 'matching' ? [] : undefined,
             correctAnswers: [], 
         };
         updatedQuestions = [...(test.questions || []), newQuestion];

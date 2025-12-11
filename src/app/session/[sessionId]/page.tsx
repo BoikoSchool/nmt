@@ -26,7 +26,7 @@ import {
   Question,
   Attempt,
   AttemptAnswer,
-  MatchingOption,
+  CorrectMatch,
 } from "@/lib/types";
 import { getDemoStudentId } from "@/lib/student";
 import { useDebouncedCallback } from "use-debounce";
@@ -226,27 +226,31 @@ export default function SessionPage({
           let isCorrect = false;
           if (q.type === 'single_choice' || q.type === 'numeric_input' || q.type === 'text_input') {
               isCorrect = q.correctAnswers.length === 1 && String(answer.value).toLowerCase() === String(q.correctAnswers[0]).toLowerCase();
+              if (isCorrect) {
+                  calculatedScore += q.points;
+              }
           } else if (q.type === 'multiple_choice') {
               const studentAnswers = (Array.isArray(answer.value) ? answer.value : []).sort();
-              const correctAnswers = [...q.correctAnswers].sort();
+              const correctAnswers = [...q.correctAnswers as string[]].sort();
               isCorrect = studentAnswers.length === correctAnswers.length && studentAnswers.every((val, index) => val === correctAnswers[index]);
+              if (isCorrect) {
+                  calculatedScore += q.points;
+              }
           } else if (q.type === 'matching') {
-              const studentMatches = answer.value as Record<string, string>; // { leftId: rightId }
-              const correctMatches = q.correctAnswers.map(ca => ca.split(':')).reduce((acc, [left, right]) => ({ ...acc, [left]: right }), {} as Record<string, string>);
+              const studentMatches = answer.value as Record<string, string>; // { promptId: optionId }
+              const correctMatches = (q.correctAnswers as CorrectMatch[]);
               
               let correctCount = 0;
-              for (const leftId in studentMatches) {
-                  if (correctMatches[leftId] === studentMatches[leftId]) {
+              for (const correctMatch of correctMatches) {
+                  if (studentMatches[correctMatch.promptId] === correctMatch.optionId) {
                       correctCount++;
                   }
               }
-              // For simplicity, grant points if all matches are correct
-              if(correctCount === q.correctAnswers.length) {
-                isCorrect = true;
+              // Award points for each correct match (partial scoring)
+              if (correctMatches.length > 0) {
+                 const pointsPerMatch = q.points / correctMatches.length;
+                 calculatedScore += correctCount * pointsPerMatch;
               }
-          }
-          if (isCorrect) {
-              calculatedScore += q.points;
           }
       });
       
@@ -254,10 +258,10 @@ export default function SessionPage({
       await updateDoc(attemptRef, {
           status: 'finished',
           finishedAt: serverTimestamp(),
-          totalScore: calculatedScore,
+          totalScore: Math.round(calculatedScore), // Round to nearest integer
       });
 
-      setAttempt(prev => prev ? { ...prev, status: 'finished', totalScore: calculatedScore } : null);
+      setAttempt(prev => prev ? { ...prev, status: 'finished', totalScore: Math.round(calculatedScore) } : null);
       setIsFinishing(false);
 
   }, [attempt, currentAnswers, allQuestions, firestore, isFinishing]);
@@ -336,7 +340,7 @@ export default function SessionPage({
                         <div className="grid grid-cols-5 gap-2">
                            {allQuestions.filter(q => q.testId === test.id).map(q => {
                                const qIndex = allQuestions.findIndex(aq => aq.id === q.id);
-                               const isAnswered = currentAnswers[q.id]?.value !== undefined && currentAnswers[q.id]?.value !== '' && currentAnswers[q.id]?.value?.length !== 0;
+                               const isAnswered = currentAnswers[q.id]?.value !== undefined && currentAnswers[q.id]?.value !== '' && Object.keys(currentAnswers[q.id]?.value || {}).length > 0;
                                return (
                                 <button
                                 key={q.id}
@@ -410,56 +414,60 @@ export default function SessionPage({
                              </div>
                          )}
                          
-                         {activeQuestion.type === 'matching' && activeQuestion.matchingOptions && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                         {activeQuestion.type === 'matching' && activeQuestion.matchPrompts && activeQuestion.options && (
+                            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-x-8 gap-y-4 items-center">
+                               {/* Prompts (Left side) */}
                                <div className="flex flex-col gap-4">
-                                {activeQuestion.matchingOptions.map((opt, index) => (
-                                    <div key={opt.id} className="flex items-center gap-4">
-                                        <div className="flex items-center justify-center h-8 w-8 rounded-md bg-secondary font-bold">{index + 1}</div>
-                                        <div className="flex-1"><KatexRenderer content={opt.left} /></div>
+                                {activeQuestion.matchPrompts.map((prompt, index) => (
+                                    <div key={prompt.id} className="flex items-center gap-4 h-10">
+                                        <div className="flex items-center justify-center h-8 w-8 rounded-md bg-secondary font-bold shrink-0">{index + 1}</div>
+                                        <div className="flex-1"><KatexRenderer content={prompt.text} /></div>
                                     </div>
                                 ))}
                                </div>
+                               
+                               {/* Selects (Middle) */}
                                <div className="flex flex-col gap-4">
-                                {activeQuestion.matchingOptions.map((opt, index) => {
+                                {activeQuestion.matchPrompts.map((prompt, index) => {
                                     const currentSelection = (currentAnswers[activeQuestion.id]?.value as Record<string, string> | undefined) || {};
-                                    const rightOptions = activeQuestion.matchingOptions!.map(o => ({ id: o.id, text: o.right }));
-                                    const rightOptionLetters = "АБВГД".split('');
-
                                     return (
-                                        <div key={opt.id} className="flex items-center gap-4">
-                                           <div className="font-bold">{index + 1}</div>
-                                           <div className="flex-1">
+                                        <div key={prompt.id} className="flex items-center gap-4 h-10">
                                              <Select
-                                                value={currentSelection[opt.id] || ""}
+                                                value={currentSelection[prompt.id] || ""}
                                                 onValueChange={(value) => {
                                                     const newSelection = {...currentSelection};
                                                     if (value) {
-                                                        newSelection[opt.id] = value;
+                                                        newSelection[prompt.id] = value;
                                                     } else {
-                                                        delete newSelection[opt.id];
+                                                        delete newSelection[prompt.id];
                                                     }
                                                     handleAnswerChange(activeQuestion, newSelection);
                                                 }}
                                              >
-                                                <SelectTrigger>
+                                                <SelectTrigger className="w-20">
                                                     <SelectValue placeholder="-" />
                                                 </SelectTrigger>
                                                 <SelectContent>
-                                                    {rightOptions.map((rightOpt, rightIndex) => (
-                                                        <SelectItem key={rightOpt.id} value={rightOpt.id}>
-                                                            <div className="flex gap-2">
-                                                                <span>{rightOptionLetters[rightIndex]}</span>
-                                                                <KatexRenderer content={rightOpt.text} />
-                                                            </div>
+                                                    {activeQuestion.options!.map((opt, optIndex) => (
+                                                        <SelectItem key={opt.id} value={opt.id}>
+                                                            {"АБВГД"[optIndex]}
                                                         </SelectItem>
                                                     ))}
                                                 </SelectContent>
                                              </Select>
-                                           </div>
                                         </div>
                                     )
                                 })}
+                               </div>
+
+                               {/* Options (Right side) */}
+                               <div className="flex flex-col gap-4">
+                               {activeQuestion.options.map((option, index) => (
+                                    <div key={option.id} className="flex items-center gap-4 h-10">
+                                       <div className="flex items-center justify-center h-8 w-8 rounded-md bg-secondary font-bold shrink-0">{"АБВГД"[index]}</div>
+                                        <div className="flex-1"><KatexRenderer content={option.text} /></div>
+                                    </div>
+                                ))}
                                </div>
                             </div>
                          )}

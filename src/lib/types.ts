@@ -14,10 +14,14 @@ export interface QuestionOption {
   text: string;
 }
 
-export interface MatchingOption {
+export interface MatchPrompt {
   id: string;
-  left: string;
-  right: string;
+  text: string;
+}
+
+export interface CorrectMatch {
+  promptId: string;
+  optionId: string;
 }
 
 export type QuestionType = 'single_choice' | 'multiple_choice' | 'numeric_input' | 'text_input' | 'matching';
@@ -28,10 +32,14 @@ export interface Question {
   type: QuestionType;
   points: number;
   imageUrl?: string;
+  // For single/multiple choice
   options?: QuestionOption[];
-  matchingOptions?: MatchingOption[];
-  correctAnswers: string[]; // For 'matching', format is "leftId:rightId"
+  // For matching
+  matchPrompts?: MatchPrompt[];
+  // Correct answers definition
+  correctAnswers: (string | CorrectMatch)[];
 }
+
 
 export interface Test {
   id: string;
