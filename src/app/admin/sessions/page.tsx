@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import Link from 'next/link';
 import {
   collection,
   doc,
@@ -65,6 +66,7 @@ import {
   Square,
   ChevronDown,
   X,
+  BarChart,
 } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { z } from "zod";
@@ -82,6 +84,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   deleteDocumentNonBlocking,
   updateDocumentNonBlocking,
+  addDocumentNonBlocking,
 } from "@/firebase/non-blocking-updates";
 import { Badge } from "@/components/ui/badge";
 import { SessionTimer } from "@/components/shared/SessionTimer";
@@ -144,8 +147,8 @@ export default function SessionsPage() {
 
   const handleCreateSession = async (data: SessionFormData) => {
     if (!sessionsCollection) return;
-    try {
-      await addDoc(sessionsCollection, {
+
+    addDocumentNonBlocking(sessionsCollection, {
         ...data,
         status: "draft",
         allowedStudents: ["all"],
@@ -157,14 +160,6 @@ export default function SessionsPage() {
       });
       toast({ title: "Сесію успішно створено!" });
       form.reset();
-    } catch (error) {
-      console.error("Error creating session: ", error);
-      toast({
-        variant: "destructive",
-        title: "Помилка",
-        description: "Не вдалося створити сесію.",
-      });
-    }
   };
 
   const handleDeleteSession = (sessionId: string) => {
@@ -402,17 +397,27 @@ export default function SessionsPage() {
                 <TableBody>
                   {sessions.map((session) => (
                     <TableRow key={session.id}>
-                      <TableCell className="font-medium">{session.title}</TableCell>
+                      <TableCell className="font-medium">
+                        <Link href={`/admin/sessions/${session.id}`} className="hover:underline">
+                          {session.title}
+                        </Link>
+                      </TableCell>
                       <TableCell>{getStatusBadge(session)}</TableCell>
                        <TableCell>
                         <SessionTimer session={session} asAdmin={true} />
                       </TableCell>
                       <TableCell>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 flex-wrap">
                            {session.status === 'draft' && <Button size="sm" variant="outline" onClick={() => handleStartSession(session)}><Play className="mr-2 h-4 w-4" />Запустити</Button>}
                            {session.status === 'active' && !session.isPaused && <Button size="sm" variant="outline" onClick={() => handlePauseSession(session)}><Pause className="mr-2 h-4 w-4" />Призупинити</Button>}
                            {session.status === 'active' && session.isPaused && <Button size="sm" variant="outline" onClick={() => handleResumeSession(session)}><PlayCircle className="mr-2 h-4 w-4" />Продовжити</Button>}
-                           {session.status !== 'finished' && <Button size="sm" variant="destructive" onClick={() => handleFinishSession(session)}><Square className="mr-2 h-4 w-4" />Завершити</Button>}
+                           {session.status !== 'finished' && <Button size="sm" variant="ghost" onClick={() => handleFinishSession(session)}><Square className="mr-2 h-4 w-4" />Завершити</Button>}
+                           <Button size="sm" variant="outline" asChild>
+                              <Link href={`/admin/sessions/${session.id}`}>
+                                <BarChart className="mr-2 h-4 w-4"/>
+                                Результати
+                              </Link>
+                           </Button>
                         </div>
                       </TableCell>
                       <TableCell className="text-right">

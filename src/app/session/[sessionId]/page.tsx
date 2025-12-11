@@ -34,7 +34,7 @@ import 'katex/dist/katex.min.css';
 import { KatexRenderer } from "@/components/shared/KatexRenderer";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -220,7 +220,7 @@ export default function SessionPage({
     if (question.type === 'matching') {
         const [promptId, optionId] = value.split(':');
         // Ensure currentAnswer.value is an object for matching questions
-        const newMatchingValue = { ...(typeof currentAnswer.value === 'object' && currentAnswer.value !== null && !Array.isArray(currentAnswer.value) ? currentAnswer.value : {}) };
+        let newMatchingValue = { ...(typeof currentAnswer.value === 'object' && currentAnswer.value !== null && !Array.isArray(currentAnswer.value) ? currentAnswer.value : {}) };
         
         if (optionId) {
             newMatchingValue[promptId] = optionId;
@@ -288,16 +288,22 @@ export default function SessionPage({
           calculatedScore += questionScore;
           scoreByTest[q.testId] += questionScore;
       });
+
+      // Round scores
+      calculatedScore = Math.round(calculatedScore);
+      Object.keys(scoreByTest).forEach(testId => {
+        scoreByTest[testId] = Math.round(scoreByTest[testId]);
+      });
       
       const attemptRef = doc(firestore, "attempts", attempt.id);
       await updateDoc(attemptRef, {
           status: 'finished',
           finishedAt: serverTimestamp(),
-          totalScore: Math.round(calculatedScore),
+          totalScore: calculatedScore,
           scoreByTest: scoreByTest,
       });
 
-      setAttempt(prev => prev ? { ...prev, status: 'finished', totalScore: Math.round(calculatedScore), scoreByTest } : null);
+      setAttempt(prev => prev ? { ...prev, status: 'finished', totalScore: calculatedScore, scoreByTest } : null);
       setIsFinishing(false);
 
   }, [attempt, currentAnswers, allQuestions, firestore, isFinishing]);
@@ -350,14 +356,32 @@ export default function SessionPage({
 
   if (attempt?.status === 'finished') {
      return (
-        <div className="flex flex-col h-screen items-center justify-center text-center p-4">
-          <CheckCircle2 className="h-16 w-16 text-green-500" />
-          <h1 className="text-2xl font-bold mt-4">Ви вже завершили цю сесію!</h1>
-          <p className="mt-2 text-muted-foreground">Ваш результат: {attempt.totalScore} балів.</p>
-           <p className="mt-1 text-sm text-muted-foreground">Детальні результати будуть доступні пізніше.</p>
-          <Button asChild className="mt-6">
-              <Link href="/student">Повернутись до кабінету</Link>
-          </Button>
+        <div className="flex flex-col min-h-screen items-center justify-center text-center p-4 bg-background">
+          <Card className="w-full max-w-lg">
+            <CardHeader>
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
+                    <CheckCircle2 className="h-6 w-6 text-green-600" />
+                </div>
+                <CardTitle className="text-2xl font-bold mt-4">Ви завершили цю сесію!</CardTitle>
+                <CardDescription>Загальний результат: {attempt.totalScore} балів.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="space-y-2">
+                    <h3 className="font-semibold">Результати по предметах:</h3>
+                    {tests.map(test => (
+                        <div key={test.id} className="flex justify-between items-center p-2 rounded-md bg-secondary">
+                           <span>{test.subjectName} - {test.title}</span>
+                           <span className="font-bold">{attempt.scoreByTest?.[test.id] ?? 0} балів</span>
+                        </div>
+                    ))}
+                </div>
+            </CardContent>
+            <CardFooter>
+                 <Button asChild className="w-full">
+                    <Link href="/student">Повернутись до кабінету</Link>
+                </Button>
+            </CardFooter>
+          </Card>
         </div>
       );
   }
@@ -403,7 +427,7 @@ export default function SessionPage({
                     {questionsForActiveTest.map(q => {
                         const qIndex = allQuestions.findIndex(aq => aq.id === q.id);
                         const answer = currentAnswers[q.id];
-                        const isAnswered = answer?.value !== undefined && answer.value !== null && answer.value !== '' && (Array.isArray(answer.value) ? answer.value.length > 0 : (typeof answer.value === 'object' ? Object.keys(answer.value).length > 0 : true));
+                        const isAnswered = answer?.value !== undefined && answer.value !== null && answer.value !== '' && (Array.isArray(answer.value) ? answer.value.length > 0 : (typeof answer.value === 'object' && !Array.isArray(answer.value) ? Object.keys(answer.value).length > 0 : true));
                         return (
                         <button
                         key={q.id}
