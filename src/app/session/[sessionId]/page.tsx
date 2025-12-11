@@ -223,7 +223,7 @@ export default function SessionPage({
         // Ensure currentAnswer.value is an object for matching questions
         let newMatchingValue = { ...(typeof currentAnswer.value === 'object' && currentAnswer.value !== null && !Array.isArray(currentAnswer.value) ? currentAnswer.value : {}) };
         
-        if (optionId) {
+        if (optionId && optionId !== 'none') {
             newMatchingValue[promptId] = optionId;
         } else {
             delete newMatchingValue[promptId];
@@ -480,6 +480,7 @@ export default function SessionPage({
                                         <div key={opt.id} className="flex items-center space-x-3">
                                             <Checkbox
                                                 id={opt.id}
+                                                key={`${activeQuestion.id}-${opt.id}`}
                                                 checked={currentSelection.includes(opt.id)}
                                                 onCheckedChange={(checked) => {
                                                     const newSelection = checked
@@ -519,7 +520,8 @@ export default function SessionPage({
                                     return (
                                         <div key={prompt.id} className="flex items-center gap-4 h-10">
                                              <Select
-                                                value={currentSelection[prompt.id] || ""}
+                                                key={`${activeQuestion.id}-${prompt.id}`}
+                                                value={currentSelection[prompt.id] || "none"}
                                                 onValueChange={(value) => handleAnswerChange(activeQuestion, `${prompt.id}:${value}`)}
                                                 disabled={session.isPaused}
                                              >
@@ -527,7 +529,7 @@ export default function SessionPage({
                                                     <SelectValue placeholder="-" />
                                                 </SelectTrigger>
                                                 <SelectContent>
-                                                    <SelectItem value="">-</SelectItem>
+                                                    <SelectItem value="none">-</SelectItem>
                                                     {activeQuestion.options!.map((opt, optIndex) => (
                                                         <SelectItem key={opt.id} value={opt.id}>
                                                             {"АБВГДЕЄЖ"[optIndex]}
