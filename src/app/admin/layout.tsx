@@ -20,7 +20,7 @@ export default function AdminLayout({
           <h1 className="text-xl font-semibold">Адмін-панель</h1>
         </nav>
       </header>
-      <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-10">
+      <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
         {children}
       </main>
     </div>
