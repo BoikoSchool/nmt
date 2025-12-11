@@ -84,6 +84,7 @@ import {
   updateDocumentNonBlocking,
 } from "@/firebase/non-blocking-updates";
 import { Badge } from "@/components/ui/badge";
+import { SessionTimer } from "@/components/shared/SessionTimer";
 
 const sessionSchema = z.object({
   title: z.string().min(1, "Назва сесії є обов'язковою."),
@@ -393,7 +394,7 @@ export default function SessionsPage() {
                   <TableRow>
                     <TableHead>Назва</TableHead>
                     <TableHead>Статус</TableHead>
-                    <TableHead>Тести</TableHead>
+                    <TableHead>Час до завершення</TableHead>
                     <TableHead>Дії</TableHead>
                     <TableHead className="text-right">Видалити</TableHead>
                   </TableRow>
@@ -403,8 +404,8 @@ export default function SessionsPage() {
                     <TableRow key={session.id}>
                       <TableCell className="font-medium">{session.title}</TableCell>
                       <TableCell>{getStatusBadge(session)}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {session.testIds.map(id => testsMap[id]).join(', ') || '-'}
+                       <TableCell>
+                        <SessionTimer session={session} asAdmin={true} />
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-2">
