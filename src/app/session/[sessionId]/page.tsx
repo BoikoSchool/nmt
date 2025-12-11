@@ -455,7 +455,8 @@ export default function SessionPage({
 
                          {activeQuestion.type === 'single_choice' && activeQuestion.options && (
                             <RadioGroup
-                                value={currentAnswers[activeQuestion.id]?.value}
+                                key={activeQuestion.id}
+                                value={currentAnswers[activeQuestion.id]?.value ?? undefined}
                                 onValueChange={(value) => handleAnswerChange(activeQuestion, value)}
                                 className="space-y-2"
                                 disabled={session.isPaused}
@@ -472,7 +473,7 @@ export default function SessionPage({
                          )}
 
                          {activeQuestion.type === 'multiple_choice' && activeQuestion.options && (
-                             <div className="space-y-2">
+                             <div key={activeQuestion.id} className="space-y-2">
                                 {activeQuestion.options.map(opt => {
                                     const currentSelection = (currentAnswers[activeQuestion.id]?.value as string[] | undefined) || [];
                                     return (
@@ -498,7 +499,7 @@ export default function SessionPage({
                          )}
                          
                          {activeQuestion.type === 'matching' && activeQuestion.matchPrompts && activeQuestion.options && (
-                            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-x-8 gap-y-4 items-center">
+                            <div key={activeQuestion.id} className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-x-8 gap-y-4 items-center">
                                {/* Prompts (Left side) */}
                                <div className="flex flex-col gap-4">
                                 {activeQuestion.matchPrompts.map((prompt, index) => (
@@ -553,9 +554,10 @@ export default function SessionPage({
 
                           {activeQuestion.type === 'numeric_input' && (
                             <Input
+                                key={activeQuestion.id}
                                 type="number"
                                 className="max-w-xs"
-                                value={currentAnswers[activeQuestion.id]?.value || ''}
+                                value={currentAnswers[activeQuestion.id]?.value ?? ''}
                                 onChange={(e) => handleAnswerChange(activeQuestion, e.target.value)}
                                 disabled={session.isPaused}
                             />
@@ -563,7 +565,8 @@ export default function SessionPage({
 
                          {activeQuestion.type === 'text_input' && (
                             <Textarea
-                                value={currentAnswers[activeQuestion.id]?.value || ''}
+                                key={activeQuestion.id}
+                                value={currentAnswers[activeQuestion.id]?.value ?? ''}
                                 onChange={(e) => handleAnswerChange(activeQuestion, e.target.value)}
                                 rows={4}
                                 disabled={session.isPaused}
