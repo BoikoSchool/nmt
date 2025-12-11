@@ -26,8 +26,9 @@ export const useAppUser = () => {
   const { data: appUser, isLoading: isAppUserLoading, error: appUserError } = useDoc<AppUser>(userDocRef);
 
   // The overall loading state is true if either the Firebase user is loading,
-  // or if we have a Firebase user but are still waiting for their Firestore document.
-  const isLoading = isFirebaseUserLoading || (!!firebaseUser && isAppUserLoading);
+  // or if we have a Firebase user but are still waiting for their Firestore document to load.
+  const isLoading = isFirebaseUserLoading || (!!firebaseUser && !appUser && !appUserError);
+
 
   return {
     firebaseUser,

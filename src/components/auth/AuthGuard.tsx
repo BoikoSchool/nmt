@@ -33,7 +33,7 @@ export function AuthGuard({ children, role }: AuthGuardProps) {
     }
   }, [appUser, isLoading, router, role]);
   
-  // While loading, show a spinner
+  // While loading, or if the user doesn't have the right role (and we are about to redirect), show a loader.
   if (isLoading || !appUser || appUser.role !== role) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -42,6 +42,6 @@ export function AuthGuard({ children, role }: AuthGuardProps) {
     );
   }
 
-  // If user has the correct role, render the children
+  // If loading is finished and the user has the correct role, render the children
   return <>{children}</>;
 }
