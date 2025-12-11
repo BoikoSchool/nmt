@@ -147,7 +147,7 @@ export default function EditTestPage({ params }: { params: { testId: string } })
         
         // Detailed validation
         const isValid = questions.every(q => {
-            if (!q.id || !q.questionText || !q.type || q.points === undefined || !q.correctAnswers) {
+            if (typeof q.id !== 'string' || typeof q.questionText !== 'string' || typeof q.type !== 'string' || typeof q.points !== 'number' || !Array.isArray(q.correctAnswers)) {
                 return false;
             }
             if (q.type === 'matching') {
@@ -159,9 +159,12 @@ export default function EditTestPage({ params }: { params: { testId: string } })
                     typeof ans === 'object' && ans.promptId && ans.optionId
                 );
             }
+            if (['single_choice', 'multiple_choice'].includes(q.type)) {
+              if (!Array.isArray(q.options)) return false;
+            }
             // For other types, correctAnswers should be an array of strings
             if (['single_choice', 'multiple_choice', 'numeric_input', 'text_input'].includes(q.type)) {
-              return Array.isArray(q.correctAnswers) && q.correctAnswers.every((ans: any) => typeof ans === 'string');
+              return q.correctAnswers.every((ans: any) => typeof ans === 'string');
             }
             // If type is unknown, fail validation
             return false;
@@ -464,7 +467,7 @@ export default function EditTestPage({ params }: { params: { testId: string } })
                     />
                 </div>
                  <p className="text-sm text-muted-foreground pt-2">
-                    Примітка: Опції, правильні відповіді та зображення для питань керуються через імпорт/експорт файлів JSON.
+                    Примітка: Питання з опціями, зображеннями та типу "на відповідність" (matching) наразі керуються виключно через імпорт/експорт файлів JSON.
                  </p>
                 <DialogFooter>
                     <DialogClose asChild><Button type="button" variant="outline">Скасувати</Button></DialogClose>

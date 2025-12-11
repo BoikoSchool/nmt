@@ -219,11 +219,14 @@ export default function SessionPage({
 
     if (question.type === 'matching') {
         const [promptId, optionId] = value.split(':');
+        // Ensure currentAnswer.value is an object for matching questions
         const newMatchingValue = { ...(typeof currentAnswer.value === 'object' && currentAnswer.value !== null && !Array.isArray(currentAnswer.value) ? currentAnswer.value : {}) };
         
         if (optionId) {
             newMatchingValue[promptId] = optionId;
         } else {
+            // This case handles deselecting an option, though the current UI doesn't directly support it.
+            // It's good practice to keep it.
             delete newMatchingValue[promptId];
         }
         newAnswers[questionId] = { ...currentAnswer, value: newMatchingValue };
@@ -426,7 +429,7 @@ export default function SessionPage({
                         
                         {activeQuestion.imageUrl && (
                             <div className="mb-4 relative h-64 w-full">
-                                <Image src={activeQuestion.imageUrl} alt={`Зображення до питання ${activeQuestion.localIndex}`} layout="fill" objectFit="contain" />
+                                <Image src={activeQuestion.imageUrl} alt={`Зображення до питання ${activeQuestion.localIndex}`} fill objectFit="contain" />
                             </div>
                         )}
 
@@ -507,7 +510,7 @@ export default function SessionPage({
                                                 <SelectContent>
                                                     {activeQuestion.options!.map((opt, optIndex) => (
                                                         <SelectItem key={opt.id} value={opt.id}>
-                                                            {"АБВГД"[optIndex]}
+                                                            {"АБВГДЕЄЖ"[optIndex]}
                                                         </SelectItem>
                                                     ))}
                                                 </SelectContent>
@@ -521,7 +524,7 @@ export default function SessionPage({
                                <div className="flex flex-col gap-4">
                                {activeQuestion.options.map((option, index) => (
                                     <div key={option.id} className="flex items-center gap-4 h-10">
-                                       <div className="flex items-center justify-center h-8 w-8 rounded-md bg-secondary font-bold shrink-0">{"АБВГД"[index]}</div>
+                                       <div className="flex items-center justify-center h-8 w-8 rounded-md bg-secondary font-bold shrink-0">{"АБВГДЕЄЖ"[index]}</div>
                                         <div className="flex-1"><KatexRenderer content={option.text} /></div>
                                     </div>
                                 ))}
