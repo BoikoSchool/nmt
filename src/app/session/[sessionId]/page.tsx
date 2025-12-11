@@ -34,7 +34,7 @@ import 'katex/dist/katex.min.css';
 import { KatexRenderer } from "@/components/shared/KatexRenderer";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -187,7 +187,6 @@ export default function SessionPage({
           status: "in_progress" as const,
           answers: {},
           scoreByTest: {},
-          totalScore: 0,
         };
         const newAttemptRef = await addDoc(attemptsCollection, newAttemptData);
         setAttempt({ id: newAttemptRef.id, ...newAttemptData } as Attempt);
@@ -241,7 +240,6 @@ export default function SessionPage({
       if (!attempt || attempt.status === 'finished' || !allQuestions.length || isFinishing) return;
       setIsFinishing(true);
 
-      let calculatedScore = 0;
       let scoreByTest: Record<string, number> = {};
 
       allQuestions.forEach(q => {
@@ -268,7 +266,7 @@ export default function SessionPage({
                   questionScore = q.points;
               }
           } else if (q.type === 'matching') {
-              const studentMatches = answer.value as Record<string, string>; // { promptId: optionId }
+              const studentMatches = answer.value as Record<string, string> || {}; // { promptId: optionId }
               const correctMatches = (q.correctAnswers as CorrectMatch[]);
               
               if (studentMatches && typeof studentMatches === 'object' && correctMatches.length > 0) {
@@ -285,12 +283,9 @@ export default function SessionPage({
               }
           }
 
-          calculatedScore += questionScore;
           scoreByTest[q.testId] += questionScore;
       });
 
-      // Round scores
-      calculatedScore = Math.round(calculatedScore);
       Object.keys(scoreByTest).forEach(testId => {
         scoreByTest[testId] = Math.round(scoreByTest[testId]);
       });
@@ -299,11 +294,10 @@ export default function SessionPage({
       await updateDoc(attemptRef, {
           status: 'finished',
           finishedAt: serverTimestamp(),
-          totalScore: calculatedScore,
           scoreByTest: scoreByTest,
       });
 
-      setAttempt(prev => prev ? { ...prev, status: 'finished', totalScore: calculatedScore, scoreByTest } : null);
+      setAttempt(prev => prev ? { ...prev, status: 'finished', scoreByTest } : null);
       setIsFinishing(false);
 
   }, [attempt, currentAnswers, allQuestions, firestore, isFinishing]);
@@ -363,14 +357,14 @@ export default function SessionPage({
                     <CheckCircle2 className="h-6 w-6 text-green-600" />
                 </div>
                 <CardTitle className="text-2xl font-bold mt-4">Ви завершили цю сесію!</CardTitle>
-                <CardDescription>Загальний результат: {attempt.totalScore} балів.</CardDescription>
+                <CardDescription>Перегляньте ваші результати нижче.</CardDescription>
             </CardHeader>
             <CardContent>
                 <div className="space-y-2">
-                    <h3 className="font-semibold">Результати по предметах:</h3>
+                    <h3 className="font-semibold text-left">Результати по предметах:</h3>
                     {tests.map(test => (
-                        <div key={test.id} className="flex justify-between items-center p-2 rounded-md bg-secondary">
-                           <span>{test.subjectName} - {test.title}</span>
+                        <div key={test.id} className="flex justify-between items-center p-3 rounded-md bg-secondary">
+                           <span className="font-medium">{test.subjectName} - {test.title}</span>
                            <span className="font-bold">{attempt.scoreByTest?.[test.id] ?? 0} балів</span>
                         </div>
                     ))}
@@ -449,7 +443,7 @@ export default function SessionPage({
                         
                         {activeQuestion.imageUrl && (
                             <div className="mb-4 relative h-64 w-full">
-                                <Image src={activeQuestion.imageUrl} alt={`Зображення до питання ${activeQuestion.localIndex}`} fill objectFit="contain" />
+                                <Image src={activeQuestion.imageUrl} alt={`Зображення до питання ${activeQuestion.localIndex}`} layout="fill" objectFit="contain" />
                             </div>
                         )}
 
@@ -517,7 +511,7 @@ export default function SessionPage({
                                <div className="flex flex-col gap-4">
                                 {activeQuestion.matchPrompts.map((prompt) => {
                                     const answerObject = currentAnswers[activeQuestion.id]?.value;
-                                    const currentSelection = (typeof answerObject === 'object' && answerObject !== null && !Array.isArray(answerObject)) ? answerObject : {};
+                                    const currentSelection = (typeof answerObject === 'object' && answerObject !== null && !Array.isArray(answerObject)) ? (answerObject as Record<string, string>) : {};
 
                                     return (
                                         <div key={prompt.id} className="flex items-center gap-4 h-10">
