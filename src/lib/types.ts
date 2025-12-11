@@ -34,3 +34,20 @@ export interface Test {
   questions: Question[];
   createdAt?: Timestamp | Date;
 }
+
+// ================== Session Types ==================
+
+export interface Session {
+    id: string;
+    title: string;
+    testIds: string[];
+    durationMinutes: number;
+    status: 'draft' | 'active' | 'finished';
+    allowedStudents: string[];
+    showDetailedResultsToStudent: boolean;
+    startTime: Timestamp | null;
+    endTime: Timestamp | null;
+    isPaused: boolean;
+    pausedAt: Timestamp | null;
+    createdAt: Timestamp;
+}
