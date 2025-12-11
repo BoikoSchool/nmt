@@ -14,6 +14,9 @@ const ADMIN_EMAILS = ['user@example.com'];
  */
 export const handleSignInWithGoogle = async (auth: Auth): Promise<User> => {
   const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({
+    prompt: 'select_account'
+  });
   try {
     const result = await signInWithPopup(auth, provider);
     const user = result.user;
