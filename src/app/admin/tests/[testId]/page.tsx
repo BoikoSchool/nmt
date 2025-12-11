@@ -3,7 +3,6 @@
 import React, { useState, useRef, useMemo, useEffect } from "react";
 import {
   doc,
-  updateDoc,
   collection,
   query,
   orderBy,
@@ -70,7 +69,6 @@ const questionSchema = z.object({
   questionText: z.string().min(1, "Текст питання є обов'язковим."),
   type: z.enum(['single_choice', 'multiple_choice', 'numeric_input', 'text_input', 'matching']),
   points: z.coerce.number().min(0, "Бали мають бути невід'ємним числом."),
-  // Further validation for options and correctAnswers would be complex here, handled in logic
 });
 type QuestionFormData = z.infer<typeof questionSchema>;
 
@@ -147,7 +145,19 @@ export default function EditTestPage({ params }: { params: { testId: string } })
         
         // Basic validation
         if (!Array.isArray(questions)) throw new Error("JSON має бути масивом.");
-        if (questions.some(q => !q.id || !q.questionText || !q.type || q.points === undefined || !q.correctAnswers)) {
+        
+        const isValid = questions.every(q => {
+            if (!q.id || !q.questionText || !q.type || q.points === undefined || !q.correctAnswers) {
+                return false;
+            }
+            if (q.type === 'matching') {
+                if (!Array.isArray(q.matchPrompts) || !Array.isArray(q.options) || !Array.isArray(q.correctAnswers)) return false;
+                return q.correctAnswers.every((ans: any) => typeof ans === 'object' && ans.promptId && ans.optionId);
+            }
+            return true;
+        });
+
+        if (!isValid) {
           throw new Error("Один або більше об'єктів питань мають невірну структуру.");
         }
 
@@ -445,7 +455,7 @@ export default function EditTestPage({ params }: { params: { testId: string } })
                     />
                 </div>
                  <p className="text-sm text-muted-foreground pt-2">
-                    Примітка: опції та правильні відповіді можна задати через імпорт JSON. Редагування цих полів в інтерфейсі поки не підтримується.
+                    Примітка: Опції, правильні відповіді та зображення для питань керуються через імпорт/експорт файлів JSON.
                  </p>
                 <DialogFooter>
                     <DialogClose asChild><Button type="button" variant="outline">Скасувати</Button></DialogClose>

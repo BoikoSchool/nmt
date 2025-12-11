@@ -17,7 +17,6 @@ import {
   useFirestore,
   useDoc,
   useMemoFirebase,
-  updateDocumentNonBlocking,
 } from "@/firebase";
 import {
   Session,
@@ -62,6 +61,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { SessionTimer } from "@/components/shared/SessionTimer";
+import { updateDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 
 type EnrichedTest = Test & { subjectName: string };
 
@@ -221,11 +221,12 @@ export default function SessionPage({
       let calculatedScore = 0;
       allQuestions.forEach(q => {
           const answer = currentAnswers[q.id];
-          if (!answer || answer.value === undefined) return;
+          if (!answer || answer.value === undefined || answer.value === null || answer.value === '') return;
 
           let isCorrect = false;
           if (q.type === 'single_choice' || q.type === 'numeric_input' || q.type === 'text_input') {
-              isCorrect = q.correctAnswers.length === 1 && String(answer.value).toLowerCase() === String(q.correctAnswers[0]).toLowerCase();
+              const correctAnswers = q.correctAnswers as string[];
+              isCorrect = correctAnswers.length === 1 && String(answer.value).toLowerCase() === String(correctAnswers[0]).toLowerCase();
               if (isCorrect) {
                   calculatedScore += q.points;
               }
@@ -240,16 +241,16 @@ export default function SessionPage({
               const studentMatches = answer.value as Record<string, string>; // { promptId: optionId }
               const correctMatches = (q.correctAnswers as CorrectMatch[]);
               
-              let correctCount = 0;
-              for (const correctMatch of correctMatches) {
-                  if (studentMatches[correctMatch.promptId] === correctMatch.optionId) {
-                      correctCount++;
+              if (studentMatches && typeof studentMatches === 'object' && correctMatches.length > 0) {
+                  let correctCount = 0;
+                  for (const correctMatch of correctMatches) {
+                      if (studentMatches[correctMatch.promptId] === correctMatch.optionId) {
+                          correctCount++;
+                      }
                   }
-              }
-              // Award points for each correct match (partial scoring)
-              if (correctMatches.length > 0) {
-                 const pointsPerMatch = q.points / correctMatches.length;
-                 calculatedScore += correctCount * pointsPerMatch;
+                  // Award points for each correct match (partial scoring)
+                  const pointsPerMatch = q.points / correctMatches.length;
+                  calculatedScore += correctCount * pointsPerMatch;
               }
           }
       });
@@ -268,10 +269,11 @@ export default function SessionPage({
 
   // Effect to auto-finish attempt when time is up or session is finished by admin
   useEffect(() => {
-    if (session?.status === 'finished' || (session?.endTime && session.endTime.toDate() <= new Date())) {
+    if (!session || attempt?.status === 'finished') return;
+    if (session.status === 'finished' || (session.endTime && session.endTime.toDate() <= new Date())) {
         finishAttempt();
     }
-  }, [session, finishAttempt]);
+  }, [session, attempt?.status, finishAttempt]);
 
 
   const activeQuestion = allQuestions[activeQuestionIndex];
@@ -340,7 +342,8 @@ export default function SessionPage({
                         <div className="grid grid-cols-5 gap-2">
                            {allQuestions.filter(q => q.testId === test.id).map(q => {
                                const qIndex = allQuestions.findIndex(aq => aq.id === q.id);
-                               const isAnswered = currentAnswers[q.id]?.value !== undefined && currentAnswers[q.id]?.value !== '' && Object.keys(currentAnswers[q.id]?.value || {}).length > 0;
+                               const answer = currentAnswers[q.id];
+                               const isAnswered = answer?.value !== undefined && answer?.value !== '' && (Array.isArray(answer.value) ? answer.value.length > 0 : Object.keys(answer.value || {}).length > 0);
                                return (
                                 <button
                                 key={q.id}
@@ -428,7 +431,7 @@ export default function SessionPage({
                                
                                {/* Selects (Middle) */}
                                <div className="flex flex-col gap-4">
-                                {activeQuestion.matchPrompts.map((prompt, index) => {
+                                {activeQuestion.matchPrompts.map((prompt) => {
                                     const currentSelection = (currentAnswers[activeQuestion.id]?.value as Record<string, string> | undefined) || {};
                                     return (
                                         <div key={prompt.id} className="flex items-center gap-4 h-10">
