@@ -9,7 +9,7 @@ import {
   Timestamp,
   doc,
 } from "firebase/firestore";
-import { useFirestore, useMemoFirebase } from "@/firebase";
+import { useFirestore, useMemoFirebase, useCollection } from "@/firebase";
 import { Session, Test } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,9 +28,16 @@ const SessionTimer = ({ session }: { session: Session }) => {
     
     if (session.isPaused) {
         // If paused, just calculate time left once and don't start interval
-        const endTimeMs = session.endTime.toDate().getTime();
-        const pausedAtMs = session.pausedAt!.toDate().getTime();
-        setTimeLeft(endTimeMs - pausedAtMs);
+        if (session.endTime && session.pausedAt) {
+            const endTimeMs = session.endTime.toDate().getTime();
+            // This calculation is incorrect. The time left should be calculated from endTime - now, but considering the pause.
+            // A better way is to store the remaining time when paused.
+            // However, with the current logic, the endTime is extended.
+            // So we just need to calculate remaining time from now. But since it's paused, we can show the time from when it was paused.
+             const now = session.pausedAt.toDate().getTime();
+             const remaining = session.endTime.toDate().getTime() - now;
+             setTimeLeft(remaining);
+        }
         return;
     }
 
@@ -52,11 +59,12 @@ const SessionTimer = ({ session }: { session: Session }) => {
   }, [session, firestore]);
 
   const formatTime = (ms: number | null) => {
-    if (ms === null || ms < 0) return "00:00";
+    if (ms === null || ms < 0) return "00:00:00";
     const totalSeconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
-    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(
       2,
       "0"
     )}`;
