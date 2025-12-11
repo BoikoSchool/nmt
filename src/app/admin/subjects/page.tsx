@@ -3,17 +3,13 @@
 import React, { useState, useEffect } from "react";
 import {
   collection,
-  onSnapshot,
-  addDoc,
-  updateDoc,
-  deleteDoc,
   doc,
   serverTimestamp,
   query,
   orderBy,
   Timestamp,
 } from "firebase/firestore";
-import { db } from "@/firebase";
+import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import { Subject } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +49,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 
 const subjectSchema = z.object({
   name: z.string().min(1, { message: "Назва предмета є обов'язковою." }),
@@ -62,11 +59,21 @@ const subjectSchema = z.object({
 type SubjectFormData = z.infer<typeof subjectSchema>;
 
 export default function SubjectsPage() {
-  const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [loading, setLoading] = useState(true);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const { toast } = useToast();
+  const firestore = useFirestore();
+
+  const subjectsCollection = useMemoFirebase(
+    () => collection(firestore, "subjects"),
+    [firestore]
+  );
+  const subjectsQuery = useMemoFirebase(
+    () => subjectsCollection && query(subjectsCollection, orderBy("createdAt", "desc")),
+    [subjectsCollection]
+  );
+  
+  const { data: subjects, isLoading: loading } = useCollection<Subject>(subjectsQuery);
 
   const form = useForm<SubjectFormData>({
     resolver: zodResolver(subjectSchema),
@@ -80,35 +87,10 @@ export default function SubjectsPage() {
     resolver: zodResolver(subjectSchema),
   });
 
-  useEffect(() => {
-    const q = query(collection(db, "subjects"), orderBy("createdAt", "desc"));
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const subjectsData: Subject[] = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as Subject[];
-        setSubjects(subjectsData);
-        setLoading(false);
-      },
-      (error) => {
-        console.error("Error fetching subjects:", error);
-        toast({
-            variant: "destructive",
-            title: "Помилка завантаження даних",
-            description: "Не вдалося завантажити список предметів.",
-        });
-        setLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [toast]);
-
   const handleAddSubject = async (data: SubjectFormData) => {
+    if (!subjectsCollection) return;
     try {
-      await addDoc(collection(db, "subjects"), {
+      addDocumentNonBlocking(subjectsCollection, {
         ...data,
         createdAt: serverTimestamp(),
       });
@@ -138,9 +120,9 @@ export default function SubjectsPage() {
 
   const handleUpdateSubject = async (data: SubjectFormData) => {
     if (!selectedSubject) return;
-    const subjectRef = doc(db, "subjects", selectedSubject.id);
+    const subjectRef = doc(firestore, "subjects", selectedSubject.id);
     try {
-      await updateDoc(subjectRef, {
+      updateDocumentNonBlocking(subjectRef, {
         name: data.name,
         description: data.description,
       });
@@ -161,9 +143,9 @@ export default function SubjectsPage() {
   };
 
   const handleDeleteSubject = async (subjectId: string) => {
-    const subjectRef = doc(db, "subjects", subjectId);
+    const subjectRef = doc(firestore, "subjects", subjectId);
     try {
-      await deleteDoc(subjectRef);
+      deleteDocumentNonBlocking(subjectRef);
        toast({
         title: "Предмет видалено.",
       });
@@ -245,7 +227,7 @@ export default function SubjectsPage() {
               <div className="flex justify-center items-center h-32">
                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
-            ) : subjects.length === 0 ? (
+            ) : !subjects || subjects.length === 0 ? (
               <p className="text-center text-muted-foreground py-8">
                 Ще не додано жодного предмета.
               </p>
