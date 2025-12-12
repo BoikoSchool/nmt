@@ -9,7 +9,6 @@ import {
   where,
   getDocs,
   serverTimestamp,
-  writeBatch,
   addDoc,
   updateDoc,
 } from "firebase/firestore";
@@ -66,7 +65,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Send,
-  Flag,
   CheckCircle2,
 } from "lucide-react";
 import { SessionTimer } from "@/components/shared/SessionTimer";
@@ -81,9 +79,9 @@ type EnrichedQuestion = Question & {
   localIndex: number;
 };
 
-type SessionPageClientProps = {
+interface SessionPageClientProps {
   sessionId: string;
-};
+}
 
 export default function SessionPageClient({
   sessionId,
@@ -235,7 +233,6 @@ export default function SessionPageClient({
 
     if (question.type === "matching") {
       const [promptId, optionId] = value.split(":");
-      // Ensure currentAnswer.value is an object for matching questions
       let newMatchingValue = {
         ...(typeof currentAnswer.value === "object" &&
         currentAnswer.value !== null &&
@@ -312,7 +309,7 @@ export default function SessionPageClient({
           questionScore = q.points;
         }
       } else if (q.type === "matching") {
-        const studentMatches = (answer.value as Record<string, string>) || {}; // { promptId: optionId }
+        const studentMatches = (answer.value as Record<string, string>) || {};
         const correctMatches = q.correctAnswers as CorrectMatch[];
 
         if (
