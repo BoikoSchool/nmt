@@ -1,49 +1,56 @@
-'use client';
+// src/firebase/index.ts
+"use client";
 
-import { firebaseConfig } from '@/firebase/config';
-import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore'
+import { firebaseConfig } from "@/firebase/config";
+import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
-// IMPORTANT: DO NOT MODIFY THIS FUNCTION
-export function initializeFirebase() {
-  if (!getApps().length) {
-    // Important! initializeApp() is called without any arguments because Firebase App Hosting
-    // integrates with the initializeApp() function to provide the environment variables needed to
-    // populate the FirebaseOptions in production. It is critical that we attempt to call initializeApp()
-    // without arguments.
-    let firebaseApp;
-    try {
-      // Attempt to initialize via Firebase App Hosting environment variables
-      firebaseApp = initializeApp();
-    } catch (e) {
-      // Only warn in production because it's normal to use the firebaseConfig to initialize
-      // during development
-      if (process.env.NODE_ENV === "production") {
-        console.warn('Automatic initialization failed. Falling back to firebase config object.', e);
-      }
-      firebaseApp = initializeApp(firebaseConfig);
-    }
+// Тип для обʼєкта з SDK
+type FirebaseSdks = {
+  firebaseApp: FirebaseApp;
+  auth: ReturnType<typeof getAuth>;
+  firestore: ReturnType<typeof getFirestore>;
+};
 
-    return getSdks(firebaseApp);
+// Кешуємо, щоб не створювати інстанси кілька разів
+let cachedSdks: FirebaseSdks | null = null;
+
+/**
+ * Централізована ініціалізація Firebase.
+ * Працює і локально, і на Vercel.
+ */
+export function initializeFirebase(): FirebaseSdks {
+  if (cachedSdks) {
+    return cachedSdks;
   }
 
-  // If already initialized, return the SDKs with the already initialized App
-  return getSdks(getApp());
+  // Якщо App ще не ініціалізований – робимо це через firebaseConfig
+  const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+
+  cachedSdks = getSdks(app);
+  return cachedSdks;
 }
 
-export function getSdks(firebaseApp: FirebaseApp) {
+/**
+ * Створює обʼєкт з основними SDK (App, Auth, Firestore)
+ */
+export function getSdks(firebaseApp: FirebaseApp): FirebaseSdks {
   return {
     firebaseApp,
     auth: getAuth(firebaseApp),
-    firestore: getFirestore(firebaseApp)
+    firestore: getFirestore(firebaseApp),
   };
 }
 
-export * from './provider';
-export * from './client-provider';
-export * from './firestore/use-collection';
-export * from './firestore/use-doc';
-export * from './non-blocking-updates';
-export * from './errors';
-export * from './error-emitter';
+// Зручні іменовані експорти, якщо десь імпортуєш напряму
+export const { firebaseApp, auth, firestore } = initializeFirebase();
+
+// Реекспорти, як було раніше
+export * from "./provider";
+export * from "./client-provider";
+export * from "./firestore/use-collection";
+export * from "./firestore/use-doc";
+export * from "./non-blocking-updates";
+export * from "./errors";
+export * from "./error-emitter";
