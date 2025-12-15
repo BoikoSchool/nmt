@@ -109,6 +109,15 @@ export default function SessionPageClient({
   const { data: session, isLoading: loadingSession } =
     useDoc<Session>(sessionRef);
 
+  const isStudentAllowed = useMemo(() => {
+    if (!session) return false;
+    if (session.allowedStudents?.includes("all")) return true;
+    if (firebaseUser && session.allowedStudents?.includes(firebaseUser.uid)) {
+      return true;
+    }
+    return false;
+  }, [session, firebaseUser]);
+
   // Fetch tests and subjects when session data is available
   useEffect(() => {
     if (!session || tests.length > 0) return;
@@ -169,7 +178,14 @@ export default function SessionPageClient({
 
   // Find or create an attempt for this student and session
   useEffect(() => {
-    if (!session || !firebaseUser) return;
+    if (!session || isUserLoading) return;
+
+    if (!firebaseUser || !isStudentAllowed) {
+      if (session && !isUserLoading && !isStudentAllowed) {
+        setIsLoading(false);
+      }
+      return;
+    }
 
     const studentId = firebaseUser.uid;
 
@@ -206,7 +222,7 @@ export default function SessionPageClient({
     };
 
     findOrCreateAttempt();
-  }, [session, firebaseUser, sessionId, firestore]);
+  }, [session, firebaseUser, sessionId, firestore, isStudentAllowed, isUserLoading]);
 
   // Debounced answer saving
   const debouncedSaveAnswer = useDebouncedCallback(
@@ -392,6 +408,35 @@ export default function SessionPageClient({
     return (
       <div className="flex h-screen items-center justify-center">
         <Loader2 className="h-16 w-16 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!firebaseUser) {
+    return (
+      <div className="flex flex-col h-screen items-center justify-center text-center p-4">
+        <h1 className="text-2xl font-bold">Увійдіть, щоб продовжити</h1>
+        <p className="mt-2 text-muted-foreground">
+          Будь ласка, увійдіть у свій акаунт, щоб розпочати тестування.
+        </p>
+        <Button asChild className="mt-6">
+          <Link href="/login">Увійти</Link>
+        </Button>
+      </div>
+    );
+  }
+
+  if (!isStudentAllowed) {
+    return (
+      <div className="flex flex-col h-screen items-center justify-center text-center p-4">
+        <h1 className="text-2xl font-bold">Сесію не знайдено</h1>
+        <p className="mt-2 text-muted-foreground">
+          Переконайтеся, що ви використовуєте коректне посилання або що вас додали до списку
+          дозволених студентів.
+        </p>
+        <Button asChild className="mt-6">
+          <Link href="/student">Повернутись до кабінету</Link>
+        </Button>
       </div>
     );
   }

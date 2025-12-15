@@ -11,7 +11,11 @@ import type { AppUser } from '@/lib/types';
  * and a loading state.
  */
 export const useAppUser = () => {
-  const { user: firebaseUser, isUserLoading: isFirebaseUserLoading } = useUser();
+  const {
+    user: firebaseUser,
+    isUserLoading: isFirebaseUserLoading,
+    userError: firebaseUserError,
+  } = useUser();
   const firestore = useFirestore();
 
   // Create a memoized reference to the user document in Firestore
@@ -21,18 +25,18 @@ export const useAppUser = () => {
     }
     return null; // No user, so no doc ref
   }, [firestore, firebaseUser]);
-  
+
   // Use the useDoc hook to fetch the app-specific user data
   const { data: appUser, isLoading: isAppUserLoading, error: appUserError } = useDoc<AppUser>(userDocRef);
 
-  // The overall loading state is true if either the Firebase user is loading,
-  // or if we have a Firebase user but are still waiting for their Firestore document to load.
-  const isLoading = isFirebaseUserLoading || (!!firebaseUser && !appUser && !appUserError);
-
+  // Loading is true while Firebase auth resolves or while the app-user document is being fetched.
+  const isLoading = isFirebaseUserLoading || isAppUserLoading;
 
   return {
     firebaseUser,
     appUser,
+    firebaseUserError,
+    appUserError,
     isLoading,
   };
 };

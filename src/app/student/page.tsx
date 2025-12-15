@@ -23,13 +23,18 @@ export default function StudentDashboard() {
   const [loading, setLoading] = useState(true);
 
   const sessionsQuery = useMemoFirebase(
-    () =>
-      query(
+    () => {
+      if (!firebaseUser) return null;
+      return query(
         collection(firestore, "sessions"),
         where("status", "==", "active"),
-        where("allowedStudents", "array-contains", "all")
-      ),
-    [firestore]
+        where("allowedStudents", "array-contains-any", [
+          "all",
+          firebaseUser.uid,
+        ])
+      );
+    },
+    [firestore, firebaseUser?.uid]
   );
   
   const testsCollection = useMemoFirebase(() => collection(firestore, "tests"), [firestore]);
@@ -44,7 +49,11 @@ export default function StudentDashboard() {
         sessions.push({ id: doc.id, ...doc.data() } as Session);
       });
       
-      const latestSession = sessions.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis())[0] || null;
+      const latestSession =
+        sessions.sort(
+          (a, b) =>
+            (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0)
+        )[0] || null;
       setActiveSession(latestSession);
       setLoading(false);
     }, (error) => {
@@ -54,6 +63,12 @@ export default function StudentDashboard() {
 
     return () => unsubscribe();
   }, [sessionsQuery, isUserLoading]);
+
+  useEffect(() => {
+    if (!firebaseUser && !isUserLoading) {
+      setLoading(false);
+    }
+  }, [firebaseUser, isUserLoading]);
 
   const getTestTitles = (testIds: string[]) => {
       if (!tests) return 'Завантаження...';
@@ -66,6 +81,21 @@ export default function StudentDashboard() {
               <Loader2 className="h-12 w-12 animate-spin text-muted-foreground" />
           </div>
       )
+  }
+
+  if (!firebaseUser) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <div className="text-center text-muted-foreground p-12 space-y-2">
+            <p className="font-medium text-lg">Увійдіть, щоб переглянути сесії.</p>
+            <Button asChild>
+              <Link href="/login">Увійти</Link>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
