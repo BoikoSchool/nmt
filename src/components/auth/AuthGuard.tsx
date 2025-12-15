@@ -11,7 +11,7 @@ interface AuthGuardProps {
 }
 
 export function AuthGuard({ children, role }: AuthGuardProps) {
-  const { appUser, isLoading } = useAppUser();
+  const { appUser, appUserError, isLoading } = useAppUser();
   const router = useRouter();
 
   useEffect(() => {
@@ -21,7 +21,7 @@ export function AuthGuard({ children, role }: AuthGuardProps) {
     }
 
     if (!appUser) {
-      // Not logged in, redirect to login page
+      // Not logged in or profile missing, redirect to login page
       router.push('/login');
       return;
     }
