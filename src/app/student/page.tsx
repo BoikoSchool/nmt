@@ -49,7 +49,11 @@ export default function StudentDashboard() {
         sessions.push({ id: doc.id, ...doc.data() } as Session);
       });
       
-      const latestSession = sessions.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis())[0] || null;
+      const latestSession =
+        sessions.sort(
+          (a, b) =>
+            (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0)
+        )[0] || null;
       setActiveSession(latestSession);
       setLoading(false);
     }, (error) => {
