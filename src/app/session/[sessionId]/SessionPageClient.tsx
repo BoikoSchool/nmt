@@ -178,8 +178,10 @@ export default function SessionPageClient({
 
   // Find or create an attempt for this student and session
   useEffect(() => {
-    if (!session || !firebaseUser || !isStudentAllowed) {
-      if (session && !isStudentAllowed) {
+    if (!session || isUserLoading) return;
+
+    if (!firebaseUser || !isStudentAllowed) {
+      if (session && !isUserLoading && !isStudentAllowed) {
         setIsLoading(false);
       }
       return;
@@ -220,7 +222,7 @@ export default function SessionPageClient({
     };
 
     findOrCreateAttempt();
-  }, [session, firebaseUser, sessionId, firestore]);
+  }, [session, firebaseUser, sessionId, firestore, isStudentAllowed, isUserLoading]);
 
   // Debounced answer saving
   const debouncedSaveAnswer = useDebouncedCallback(
@@ -406,6 +408,20 @@ export default function SessionPageClient({
     return (
       <div className="flex h-screen items-center justify-center">
         <Loader2 className="h-16 w-16 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!firebaseUser) {
+    return (
+      <div className="flex flex-col h-screen items-center justify-center text-center p-4">
+        <h1 className="text-2xl font-bold">Увійдіть, щоб продовжити</h1>
+        <p className="mt-2 text-muted-foreground">
+          Будь ласка, увійдіть у свій акаунт, щоб розпочати тестування.
+        </p>
+        <Button asChild className="mt-6">
+          <Link href="/login">Увійти</Link>
+        </Button>
       </div>
     );
   }
