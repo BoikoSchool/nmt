@@ -3,6 +3,10 @@
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAppUser } from '@/hooks/useAppUser';
+import { useAuth } from '@/firebase';
+import { handleSignOut } from '@/lib/auth';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 
 interface AuthGuardProps {
@@ -11,8 +15,9 @@ interface AuthGuardProps {
 }
 
 export function AuthGuard({ children, role }: AuthGuardProps) {
-  const { appUser, appUserError, isLoading } = useAppUser();
+  const { firebaseUser, appUser, appUserError, firebaseUserError, isLoading } = useAppUser();
   const router = useRouter();
+  const auth = useAuth();
 
   useEffect(() => {
     if (isLoading) {
@@ -20,21 +25,44 @@ export function AuthGuard({ children, role }: AuthGuardProps) {
       return;
     }
 
-    if (!appUser) {
-      // Not logged in or profile missing, redirect to login page
-      router.push('/login');
+    if (!firebaseUser) {
+      // Not logged in, redirect to login page
+      router.replace('/login');
       return;
     }
 
-    if (appUser.role !== role) {
+    if (appUser && appUser.role !== role) {
       // Logged in, but wrong role. Redirect to their correct dashboard.
       const destination = appUser.role === 'admin' ? '/admin' : '/student';
-      router.push(destination);
+      router.replace(destination);
     }
-  }, [appUser, isLoading, router, role]);
-  
+  }, [appUser, firebaseUser, isLoading, router, role]);
+
+  const signOutAndGoHome = async () => {
+    await handleSignOut(auth);
+    router.replace('/');
+  };
+
+  if (appUserError || firebaseUserError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-4">
+        <Card className="max-w-md w-full">
+          <CardHeader>
+            <CardTitle>Не вдалося завантажити профіль</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 text-muted-foreground">
+            <p>Будь ласка, спробуйте оновити сторінку або увійдіть ще раз.</p>
+            <Button onClick={signOutAndGoHome} className="w-full">
+              Вийти та повернутися на головну
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   // While loading, or if the user doesn't have the right role (and we are about to redirect), show a loader.
-  if (isLoading || !appUser || appUser.role !== role) {
+  if (isLoading || !firebaseUser || !appUser || appUser.role !== role) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-16 w-16 animate-spin text-primary" />

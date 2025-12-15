@@ -11,7 +11,11 @@ import type { AppUser } from '@/lib/types';
  * and a loading state.
  */
 export const useAppUser = () => {
-  const { user: firebaseUser, isUserLoading: isFirebaseUserLoading } = useUser();
+  const {
+    user: firebaseUser,
+    isUserLoading: isFirebaseUserLoading,
+    userError: firebaseUserError,
+  } = useUser();
   const firestore = useFirestore();
 
   // Create a memoized reference to the user document in Firestore
@@ -31,6 +35,7 @@ export const useAppUser = () => {
   return {
     firebaseUser,
     appUser,
+    firebaseUserError,
     appUserError,
     isLoading,
   };
