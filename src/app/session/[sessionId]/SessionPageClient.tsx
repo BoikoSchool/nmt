@@ -65,6 +65,7 @@ import type {
   AttemptAnswer,
   CorrectMatch,
 } from "@/lib/types";
+import { useAppUser } from "@/hooks/useAppUser";
 
 type SessionRow = {
   id: string;
@@ -125,9 +126,8 @@ function shallowEqual(obj1: any, obj2: any): boolean {
 export default function SessionPageClient({
   sessionId,
 }: SessionPageClientProps) {
-  // auth user
-  const [user, setUser] = useState<{ id: string } | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
+  // Використовуємо useAppUser замість прямого supabase.auth.getUser()
+  const { appUser, isLoading: authLoading } = useAppUser();
 
   // session / data
   const [session, setSession] = useState<SessionRow | null>(null);
@@ -157,29 +157,6 @@ export default function SessionPageClient({
   // Refs для запобігання зайвим оновленням
   const sessionRef = useRef<SessionRow | null>(null);
   const isFinishingRef = useRef(false);
-
-  // ---------- AUTH ----------
-  useEffect(() => {
-    let mounted = true;
-
-    (async () => {
-      const { data } = await supabase.auth.getUser();
-      if (!mounted) return;
-      setUser(data.user ? { id: data.user.id } : null);
-      setAuthLoading(false);
-    })();
-
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, sess) => {
-      if (!mounted) return;
-      setUser(sess?.user ? { id: sess.user.id } : null);
-      setAuthLoading(false);
-    });
-
-    return () => {
-      mounted = false;
-      sub.subscription.unsubscribe();
-    };
-  }, []);
 
   // ---------- SESSION FETCH з shallow comparison ----------
   const fetchSession = useCallback(async () => {
@@ -274,9 +251,9 @@ export default function SessionPageClient({
     if (!session) return false;
     const allowed = session.allowed_students ?? [];
     if (allowed.includes("all")) return true;
-    if (user && allowed.includes(user.id)) return true;
+    if (appUser && allowed.includes(appUser.id)) return true;
     return false;
-  }, [session, user]);
+  }, [session, appUser]);
 
   // ---------- TESTS + SUBJECTS (оновлюється тільки коли test_ids змінюється) ----------
   useEffect(() => {
@@ -387,7 +364,7 @@ export default function SessionPageClient({
     if (!session) return;
     if (authLoading) return;
 
-    if (!user || !isStudentAllowed) {
+    if (!appUser || !isStudentAllowed) {
       setIsLoading(false);
       return;
     }
@@ -401,7 +378,7 @@ export default function SessionPageClient({
         .from("attempts")
         .select("*")
         .eq("session_id", sessionId)
-        .eq("student_id", user.id)
+        .eq("student_id", appUser.id)
         .limit(1)
         .maybeSingle();
 
@@ -426,7 +403,7 @@ export default function SessionPageClient({
           .from("attempts")
           .insert({
             session_id: sessionId,
-            student_id: user.id,
+            student_id: appUser.id,
             status: "in_progress",
             started_at: new Date().toISOString(),
             finished_at: null,
@@ -455,7 +432,7 @@ export default function SessionPageClient({
     return () => {
       mounted = false;
     };
-  }, [session?.status, sessionId, user?.id, authLoading, isStudentAllowed]);
+  }, [session?.status, sessionId, appUser?.id, authLoading, isStudentAllowed]);
 
   // ---------- Debounced answers save ----------
   const debouncedSaveAnswers = useDebouncedCallback(
@@ -677,7 +654,7 @@ export default function SessionPageClient({
     );
   }
 
-  if (!user) {
+  if (!appUser) {
     return (
       <div className="flex flex-col h-screen items-center justify-center text-center p-4">
         <h1 className="text-2xl font-bold">Увійдіть, щоб продовжити</h1>
@@ -686,6 +663,23 @@ export default function SessionPageClient({
         </p>
         <Button asChild className="mt-6">
           <Link href="/login">Увійти</Link>
+        </Button>
+      </div>
+    );
+  }
+
+  // Перевіряємо що це студент
+  if (appUser.role !== "student") {
+    return (
+      <div className="flex flex-col h-screen items-center justify-center text-center p-4">
+        <h1 className="text-2xl font-bold">Доступ тільки для студентів</h1>
+        <p className="mt-2 text-muted-foreground">
+          Ця сторінка доступна тільки для студентів.
+        </p>
+        <Button asChild className="mt-6">
+          <Link href={appUser.role === "admin" ? "/admin" : "/"}>
+            Повернутись
+          </Link>
         </Button>
       </div>
     );
