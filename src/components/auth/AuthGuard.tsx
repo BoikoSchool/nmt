@@ -14,41 +14,43 @@ interface AuthGuardProps {
 }
 
 export function AuthGuard({ children, role }: AuthGuardProps) {
-  const { firebaseUser, appUser, appUserError, firebaseUserError, isLoading } =
-    useAppUser();
+  const { appUser, appUserError, isLoading } = useAppUser();
   const router = useRouter();
 
   useEffect(() => {
     if (isLoading) return;
 
-    // Не залогінений → на /login
-    if (!firebaseUser) {
+    // Якщо немає appUser (не залогінений або помилка) → на /login
+    if (!appUser) {
       router.replace("/login");
       return;
     }
 
-    // Якщо профіль (appUser) вже є і роль не та — редіректимо
-    // (коли перенесемо profiles/users у Supabase, це запрацює автоматично)
-    if (appUser && appUser.role !== role) {
+    // Якщо роль не відповідає → редірект на правильну сторінку
+    if (appUser.role !== role) {
       const destination = appUser.role === "admin" ? "/admin" : "/student";
       router.replace(destination);
     }
-  }, [appUser, firebaseUser, isLoading, router, role]);
+  }, [appUser, isLoading, router, role]);
 
   const signOutAndGoHome = async () => {
     await handleSignOut();
     router.replace("/");
   };
 
-  if (appUserError || firebaseUserError) {
+  // Показуємо помилку якщо не вдалося завантажити профіль
+  if (appUserError) {
     return (
       <div className="flex min-h-screen items-center justify-center p-4">
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle>Не вдалося завантажити профіль</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4 text-muted-foreground">
-            <p>Спробуйте оновити сторінку або увійдіть ще раз.</p>
+          <CardContent className="space-y-4">
+            <p className="text-muted-foreground">
+              Спробуйте оновити сторінку або увійдіть ще раз.
+            </p>
+            <p className="text-sm text-destructive">{appUserError}</p>
             <Button onClick={signOutAndGoHome} className="w-full">
               Вийти та повернутися на головну
             </Button>
@@ -58,8 +60,11 @@ export function AuthGuard({ children, role }: AuthGuardProps) {
     );
   }
 
-  // Поки вантажиться або поки робимо редірект — спінер
-  if (isLoading || !firebaseUser) {
+  // Показуємо лоадер якщо:
+  // 1. Завантажується автентифікація
+  // 2. Завантажується профіль
+  // 3. Немає appUser (редірект в процесі)
+  if (isLoading || !appUser) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-16 w-16 animate-spin text-primary" />
@@ -67,7 +72,15 @@ export function AuthGuard({ children, role }: AuthGuardProps) {
     );
   }
 
-  // Тимчасово пропускаємо, навіть якщо appUser ще null (бо ролі ще не перенесені)
-  // Коли appUser з’явиться, роль перевіриться у useEffect.
+  // Якщо роль не відповідає - показуємо лоадер (редірект в процесі через useEffect)
+  if (appUser.role !== role) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-16 w-16 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // ✅ Тепер точно є appUser з правильною роллю
   return <>{children}</>;
 }
