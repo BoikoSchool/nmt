@@ -1,14 +1,13 @@
 "use client";
 
-import React, { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAppUser } from '@/hooks/useAppUser';
-import { Loader2 } from 'lucide-react';
+import React, { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAppUser } from "@/hooks/useAppUser";
+import { Loader2 } from "lucide-react";
 
 export default function Home() {
   const { appUser, isLoading } = useAppUser();
   const router = useRouter();
-
   useEffect(() => {
     if (isLoading) {
       // Still loading, do nothing yet
@@ -17,13 +16,13 @@ export default function Home() {
 
     if (!appUser) {
       // No user, redirect to login
-      router.push('/login');
+      router.push("/login");
     } else {
       // User found, redirect based on role
-      if (appUser.role === 'admin') {
-        router.push('/admin');
+      if (appUser.role === "admin") {
+        router.push("/admin");
       } else {
-        router.push('/student');
+        router.push("/student");
       }
     }
   }, [appUser, isLoading, router]);

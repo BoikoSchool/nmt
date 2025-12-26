@@ -1,12 +1,12 @@
-import type {Metadata} from 'next';
-import './globals.css';
-import { Toaster } from '@/components/ui/toaster';
-import { cn } from '@/lib/utils';
-import { FirebaseClientProvider } from '@/firebase/client-provider';
+import type { Metadata } from "next";
+import "./globals.css";
+import { Toaster } from "@/components/ui/toaster";
+import { cn } from "@/lib/utils";
+import { SupabaseClientProvider } from "@/supabase/client-provider";
 
 export const metadata: Metadata = {
-  title: 'NMT Demo Platform',
-  description: 'Пробна платформа для підготовки до НМТ',
+  title: "NMT Demo Platform",
+  description: "Пробна платформа для підготовки до НМТ",
 };
 
 export default function RootLayout({
@@ -18,13 +18,18 @@ export default function RootLayout({
     <html lang="uk" className="h-full">
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet" />
+        <link
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossOrigin="anonymous"
+        />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap"
+          rel="stylesheet"
+        />
       </head>
-      <body className={cn('font-body antialiased')}>
-        <FirebaseClientProvider>
-          {children}
-        </FirebaseClientProvider>
+      <body className={cn("font-body antialiased")}>
+        <SupabaseClientProvider>{children}</SupabaseClientProvider>
         <Toaster />
       </body>
     </html>
