@@ -2,11 +2,12 @@
 import SessionPageClient from "./SessionPageClient";
 
 interface PageProps {
-  params: { sessionId: string };
+  params: Promise<{ sessionId: string }>; // ✅ params тепер Promise
 }
 
-export default function Page({ params }: PageProps) {
-  const { sessionId } = params;
+export default async function Page({ params }: PageProps) {
+  // ✅ async
+  const { sessionId } = await params; // ✅ await params
 
   return <SessionPageClient sessionId={sessionId} />;
 }

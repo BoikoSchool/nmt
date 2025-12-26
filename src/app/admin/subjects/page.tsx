@@ -1,20 +1,19 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import {
-  collection,
-  doc,
-  serverTimestamp,
-  query,
-  orderBy,
-  Timestamp,
-} from "firebase/firestore";
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
+import React, { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
+
 import { Subject } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardFooter,
+} from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -43,13 +42,20 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Loader2, Plus, Pencil, Trash2 } from "lucide-react";
+
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
-import { addDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 
 const subjectSchema = z.object({
   name: z.string().min(1, { message: "Назва предмета є обов'язковою." }),
@@ -58,53 +64,96 @@ const subjectSchema = z.object({
 
 type SubjectFormData = z.infer<typeof subjectSchema>;
 
+type SubjectRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+};
+
+function rowToSubject(row: SubjectRow): Subject {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description ?? undefined,
+    // лишаємо createdAt, щоб мінімально ламати існуючий UI/типи
+    createdAt: new Date(row.created_at),
+  };
+}
+
 export default function SubjectsPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [loading, setLoading] = useState(true);
   const { toast } = useToast();
-  const firestore = useFirestore();
-
-  const subjectsCollection = useMemoFirebase(
-    () => collection(firestore, "subjects"),
-    [firestore]
-  );
-  const subjectsQuery = useMemoFirebase(
-    () => subjectsCollection && query(subjectsCollection, orderBy("createdAt", "desc")),
-    [subjectsCollection]
-  );
-  
-  const { data: subjects, isLoading: loading } = useCollection<Subject>(subjectsQuery);
 
   const form = useForm<SubjectFormData>({
     resolver: zodResolver(subjectSchema),
-    defaultValues: {
-      name: "",
-      description: "",
-    },
+    defaultValues: { name: "", description: "" },
   });
 
   const editForm = useForm<SubjectFormData>({
     resolver: zodResolver(subjectSchema),
   });
 
-  const handleAddSubject = async (data: SubjectFormData) => {
-    if (!subjectsCollection) return;
-    try {
-      addDocumentNonBlocking(subjectsCollection, {
-        ...data,
-        createdAt: serverTimestamp(),
+  const fetchSubjects = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("subjects")
+      .select("id,name,description,created_at")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Fetch subjects error:", error);
+      toast({
+        variant: "destructive",
+        title: "Помилка",
+        description: error.message,
       });
+      setLoading(false);
+      return;
+    }
+
+    setSubjects((data as SubjectRow[]).map(rowToSubject));
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchSubjects();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleAddSubject = async (data: SubjectFormData) => {
+    try {
+      const { data: inserted, error } = await supabase
+        .from("subjects")
+        .insert({
+          name: data.name,
+          description: data.description?.trim()
+            ? data.description.trim()
+            : null,
+        })
+        .select("id,name,description,created_at")
+        .single();
+
+      if (error) throw error;
+
+      setSubjects((prev) => [rowToSubject(inserted as SubjectRow), ...prev]);
+
       toast({
         title: "Предмет додано!",
         description: `"${data.name}" успішно створено.`,
       });
       form.reset();
-    } catch (error) {
-      console.error("Error adding subject: ", error);
-       toast({
+    } catch (error: any) {
+      console.error("Error adding subject:", error);
+      toast({
         variant: "destructive",
         title: "Помилка",
-        description: "Не вдалося додати предмет.",
+        description:
+          error?.message ??
+          "Не вдалося додати предмет (можливо, RLS не дозволяє INSERT).",
       });
     }
   };
@@ -112,57 +161,88 @@ export default function SubjectsPage() {
   const openEditModal = (subject: Subject) => {
     setSelectedSubject(subject);
     editForm.reset({
-        name: subject.name,
-        description: subject.description || "",
+      name: subject.name,
+      description: subject.description || "",
     });
     setIsEditModalOpen(true);
   };
 
   const handleUpdateSubject = async (data: SubjectFormData) => {
     if (!selectedSubject) return;
-    const subjectRef = doc(firestore, "subjects", selectedSubject.id);
+
     try {
-      updateDocumentNonBlocking(subjectRef, {
-        name: data.name,
-        description: data.description,
-      });
+      const { data: updated, error } = await supabase
+        .from("subjects")
+        .update({
+          name: data.name,
+          description: data.description?.trim()
+            ? data.description.trim()
+            : null,
+        })
+        .eq("id", selectedSubject.id)
+        .select("id,name,description,created_at")
+        .single();
+
+      if (error) throw error;
+
+      const updatedSubject = rowToSubject(updated as SubjectRow);
+      setSubjects((prev) =>
+        prev.map((s) => (s.id === updatedSubject.id ? updatedSubject : s))
+      );
+
       toast({
         title: "Предмет оновлено!",
         description: "Зміни успішно збережено.",
       });
+
       setIsEditModalOpen(false);
       setSelectedSubject(null);
-    } catch (error) {
-       console.error("Error updating subject: ", error);
-       toast({
+    } catch (error: any) {
+      console.error("Error updating subject:", error);
+      toast({
         variant: "destructive",
         title: "Помилка",
-        description: "Не вдалося оновити предмет.",
+        description:
+          error?.message ??
+          "Не вдалося оновити предмет (можливо, RLS не дозволяє UPDATE).",
       });
     }
   };
 
   const handleDeleteSubject = async (subjectId: string) => {
-    const subjectRef = doc(firestore, "subjects", subjectId);
     try {
-      deleteDocumentNonBlocking(subjectRef);
-       toast({
-        title: "Предмет видалено.",
-      });
-    } catch (error) {
-       console.error("Error deleting subject: ", error);
-       toast({
+      const { error } = await supabase
+        .from("subjects")
+        .delete()
+        .eq("id", subjectId);
+
+      if (error) throw error;
+
+      setSubjects((prev) => prev.filter((s) => s.id !== subjectId));
+
+      toast({ title: "Предмет видалено." });
+    } catch (error: any) {
+      console.error("Error deleting subject:", error);
+      toast({
         variant: "destructive",
         title: "Помилка",
-        description: "Не вдалося видалити предмет.",
+        description:
+          error?.message ??
+          "Не вдалося видалити предмет (можливо, RLS не дозволяє DELETE).",
       });
     }
   };
 
-  const formatDate = (date: Timestamp | Date | undefined) => {
+  const formatDate = (date: any) => {
     if (!date) return "N/A";
-    const jsDate = date instanceof Timestamp ? date.toDate() : date;
-    return format(jsDate, "dd.MM.yyyy");
+    const jsDate: Date =
+      date instanceof Date
+        ? date
+        : date?.toDate?.()
+        ? date.toDate()
+        : new Date(date);
+
+    return isNaN(jsDate.getTime()) ? "N/A" : format(jsDate, "dd.MM.yyyy");
   };
 
   return (
@@ -172,39 +252,45 @@ export default function SubjectsPage() {
           <CardHeader>
             <CardTitle>Додати новий предмет</CardTitle>
           </CardHeader>
+
           <Form {...form}>
             <form onSubmit={form.handleSubmit(handleAddSubject)}>
               <CardContent className="space-y-4">
-                 <FormField
-                    control={form.control}
-                    name="name"
-                    render={({ field }) => (
-                        <FormItem>
-                        <FormLabel>Назва предмета*</FormLabel>
-                        <FormControl>
-                            <Input placeholder="Напр. Українська мова" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                        </FormItem>
-                    )}
-                    />
                 <FormField
-                    control={form.control}
-                    name="description"
-                    render={({ field }) => (
-                        <FormItem>
-                        <FormLabel>Опис (необов'язково)</FormLabel>
-                        <FormControl>
-                            <Textarea placeholder="Короткий опис предмета" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                        </FormItem>
-                    )}
-                    />
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Назва предмета*</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Напр. Українська мова" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Опис (необов'язково)</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="Короткий опис предмета"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </CardContent>
+
               <CardFooter>
                 <Button type="submit" disabled={form.formState.isSubmitting}>
-                   {form.formState.isSubmitting ? (
+                  {form.formState.isSubmitting ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   ) : (
                     <Plus className="mr-2 h-4 w-4" />
@@ -222,12 +308,13 @@ export default function SubjectsPage() {
           <CardHeader>
             <CardTitle>Список предметів</CardTitle>
           </CardHeader>
+
           <CardContent>
             {loading ? (
               <div className="flex justify-center items-center h-32">
-                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
-            ) : !subjects || subjects.length === 0 ? (
+            ) : subjects.length === 0 ? (
               <p className="text-center text-muted-foreground py-8">
                 Ще не додано жодного предмета.
               </p>
@@ -237,45 +324,70 @@ export default function SubjectsPage() {
                   <TableRow>
                     <TableHead>Назва</TableHead>
                     <TableHead className="hidden md:table-cell">Опис</TableHead>
-                    <TableHead className="hidden sm:table-cell">Дата створення</TableHead>
+                    <TableHead className="hidden sm:table-cell">
+                      Дата створення
+                    </TableHead>
                     <TableHead className="text-right">Дії</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {subjects.map((subject) => (
                     <TableRow key={subject.id}>
-                      <TableCell className="font-medium">{subject.name}</TableCell>
-                      <TableCell className="hidden md:table-cell text-sm text-muted-foreground truncate max-w-xs">{subject.description || "-"}</TableCell>
-                      <TableCell className="hidden sm:table-cell text-sm text-muted-foreground">{formatDate(subject.createdAt)}</TableCell>
+                      <TableCell className="font-medium">
+                        {subject.name}
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell text-sm text-muted-foreground truncate max-w-xs">
+                        {subject.description || "-"}
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell text-sm text-muted-foreground">
+                        {formatDate(subject.createdAt)}
+                      </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                            <Button variant="ghost" size="icon" onClick={() => openEditModal(subject)}>
-                                <Pencil className="h-4 w-4" />
-                                <span className="sr-only">Редагувати</span>
-                            </Button>
-                            <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
-                                        <Trash2 className="h-4 w-4" />
-                                        <span className="sr-only">Видалити</span>
-                                    </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                    <AlertDialogTitle>Ви впевнені?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                        Цю дію неможливо скасувати. Це назавжди видалить предмет
-                                        "{subject.name}".
-                                    </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                    <AlertDialogCancel>Скасувати</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => handleDeleteSubject(subject.id)}>
-                                        Видалити
-                                    </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                </AlertDialogContent>
-                            </AlertDialog>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => openEditModal(subject)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                            <span className="sr-only">Редагувати</span>
+                          </Button>
+
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-destructive hover:text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                <span className="sr-only">Видалити</span>
+                              </Button>
+                            </AlertDialogTrigger>
+
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>
+                                  Ви впевнені?
+                                </AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Цю дію неможливо скасувати. Це назавжди
+                                  видалить предмет "{subject.name}".
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Скасувати</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() =>
+                                    handleDeleteSubject(subject.id)
+                                  }
+                                >
+                                  Видалити
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -286,52 +398,64 @@ export default function SubjectsPage() {
           </CardContent>
         </Card>
       </div>
-        
-      {/* Edit Modal */}
+
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Редагувати предмет</DialogTitle>
           </DialogHeader>
-           <Form {...editForm}>
-            <form onSubmit={editForm.handleSubmit(handleUpdateSubject)} className="space-y-4 py-4">
-                 <FormField
-                    control={editForm.control}
-                    name="name"
-                    render={({ field }) => (
-                        <FormItem>
-                        <FormLabel>Назва предмета*</FormLabel>
-                        <FormControl>
-                            <Input {...field} />
-                        </FormControl>
-                        <FormMessage />
-                        </FormItem>
-                    )}
-                    />
-                <FormField
-                    control={editForm.control}
-                    name="description"
-                    render={({ field }) => (
-                        <FormItem>
-                        <FormLabel>Опис</FormLabel>
-                        <FormControl>
-                            <Textarea {...field} />
-                        </FormControl>
-                        <FormMessage />
-                        </FormItem>
-                    )}
-                    />
-                <DialogFooter>
-                    <DialogClose asChild>
-                        <Button type="button" variant="outline">Скасувати</Button>
-                    </DialogClose>
-                    <Button type="submit" disabled={editForm.formState.isSubmitting}>
-                         {editForm.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Зберегти зміни
-                    </Button>
-                </DialogFooter>
+
+          <Form {...editForm}>
+            <form
+              onSubmit={editForm.handleSubmit(handleUpdateSubject)}
+              className="space-y-4 py-4"
+            >
+              <FormField
+                control={editForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Назва предмета*</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={editForm.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Опис</FormLabel>
+                    <FormControl>
+                      <Textarea {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button type="button" variant="outline">
+                    Скасувати
+                  </Button>
+                </DialogClose>
+                <Button
+                  type="submit"
+                  disabled={editForm.formState.isSubmitting}
+                >
+                  {editForm.formState.isSubmitting && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Зберегти зміни
+                </Button>
+              </DialogFooter>
             </form>
-           </Form>
+          </Form>
         </DialogContent>
       </Dialog>
     </div>

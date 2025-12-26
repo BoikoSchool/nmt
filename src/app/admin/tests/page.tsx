@@ -1,22 +1,21 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import {
-  collection,
-  doc,
-  serverTimestamp,
-  query,
-  orderBy,
-  addDoc,
-} from "firebase/firestore";
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
-import { Subject, Test } from "@/lib/types";
+import { supabase } from "@/lib/supabaseClient";
+import type { Subject, Test } from "@/lib/types";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -43,14 +42,20 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Loader2, Plus, Pencil, Trash2, ArrowRight } from "lucide-react";
-import { useForm, Controller } from "react-hook-form";
+import { Loader2, Plus, Pencil, Trash2 } from "lucide-react";
+import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
-import { deleteDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 
 const testSchema = z.object({
   title: z.string().min(1, { message: "Назва тесту є обов'язковою." }),
@@ -60,37 +65,32 @@ const testSchema = z.object({
 
 type TestFormData = z.infer<typeof testSchema>;
 
+type DbSubjectRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+};
+
+type DbTestRow = {
+  id: string;
+  subject_id: string;
+  title: string;
+  description: string | null;
+  created_at: string;
+};
+
 export default function TestsPage() {
-  const firestore = useFirestore();
-  const router = useRouter();
   const { toast } = useToast();
 
-  // Fetch subjects for the dropdown
-  const subjectsCollection = useMemoFirebase(
-    () => collection(firestore, "subjects"),
-    [firestore]
-  );
-  const subjectsQuery = useMemoFirebase(
-    () => subjectsCollection && query(subjectsCollection, orderBy("name")),
-    [subjectsCollection]
-  );
-  const { data: subjects, isLoading: loadingSubjects } = useCollection<Subject>(subjectsQuery);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [tests, setTests] = useState<Test[]>([]);
+  const [loadingSubjects, setLoadingSubjects] = useState(true);
+  const [loadingTests, setLoadingTests] = useState(true);
 
-  // Fetch tests for the list
-  const testsCollection = useMemoFirebase(
-    () => collection(firestore, "tests"),
-    [firestore]
-  );
-  const testsQuery = useMemoFirebase(
-    () => testsCollection && query(testsCollection, orderBy("createdAt", "desc")),
-    [testsCollection]
-  );
-  const { data: tests, isLoading: loadingTests } = useCollection<Test>(testsQuery);
-
-  const subjectsMap = useMemoFirebase(() => {
-    if (!subjects) return {};
-    return subjects.reduce((acc, subject) => {
-      acc[subject.id] = subject.name;
+  const subjectsMap = useMemo(() => {
+    return (subjects ?? []).reduce((acc, s) => {
+      acc[s.id] = s.name;
       return acc;
     }, {} as Record<string, string>);
   }, [subjects]);
@@ -104,22 +104,111 @@ export default function TestsPage() {
     },
   });
 
-  const handleCreateTest = async (data: TestFormData) => {
-    if (!testsCollection) return;
-    try {
-      const newTestRef = await addDoc(testsCollection, {
-        ...data,
-        questions: [],
-        createdAt: serverTimestamp(),
+  async function loadSubjects() {
+    setLoadingSubjects(true);
+    const { data, error } = await supabase
+      .from("subjects")
+      .select("id,name,description,created_at")
+      .order("name", { ascending: true });
+
+    if (error) {
+      console.error("loadSubjects error:", error);
+      toast({
+        variant: "destructive",
+        title: "Помилка",
+        description: "Не вдалося завантажити предмети.",
       });
+      setSubjects([]);
+      setLoadingSubjects(false);
+      return;
+    }
+
+    const mapped: Subject[] = (data as DbSubjectRow[]).map((row) => ({
+      id: row.id,
+      name: row.name,
+      description: row.description ?? undefined,
+      createdAt: row.created_at,
+    }));
+
+    setSubjects(mapped);
+    setLoadingSubjects(false);
+  }
+
+  async function loadTests() {
+    setLoadingTests(true);
+    const { data, error } = await supabase
+      .from("tests")
+      .select("id,subject_id,title,description,created_at")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("loadTests error:", error);
+      toast({
+        variant: "destructive",
+        title: "Помилка",
+        description: "Не вдалося завантажити тести.",
+      });
+      setTests([]);
+      setLoadingTests(false);
+      return;
+    }
+
+    const mapped: Test[] = (data as DbTestRow[]).map((row) => ({
+      id: row.id,
+      subjectId: row.subject_id,
+      title: row.title,
+      description: row.description ?? undefined,
+      questions: [], // питання підтягнемо на сторінці редагування тесту (наступний крок)
+      createdAt: row.created_at,
+    }));
+
+    setTests(mapped);
+    setLoadingTests(false);
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      await Promise.all([loadSubjects(), loadTests()]);
+      if (cancelled) return;
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleCreateTest = async (data: TestFormData) => {
+    try {
+      const { data: created, error } = await supabase
+        .from("tests")
+        .insert({
+          subject_id: data.subjectId,
+          title: data.title,
+          description: data.description?.trim()
+            ? data.description.trim()
+            : null,
+        })
+        .select("id")
+        .single();
+
+      if (error) throw error;
+
       toast({
         title: "Тест створено!",
         description: `Тест "${data.title}" успішно створено.`,
       });
+
       form.reset();
-      router.push(`/admin/tests/${newTestRef.id}`); // Navigate to edit page
+      await loadTests();
+
+      // НЕ переходимо на /admin/tests/[id] поки не переведемо ту сторінку з Firebase на Supabase
+      // (це буде наступним кроком)
+      console.log("Created test id:", created?.id);
     } catch (error) {
-      console.error("Error creating test: ", error);
+      console.error("Error creating test:", error);
       toast({
         variant: "destructive",
         title: "Помилка",
@@ -127,16 +216,25 @@ export default function TestsPage() {
       });
     }
   };
-  
+
   const handleDeleteTest = async (testId: string) => {
-    const testRef = doc(firestore, "tests", testId);
     try {
-      deleteDocumentNonBlocking(testRef);
-      toast({
-        title: "Тест видалено.",
-      });
+      // Якщо є FK questions.test_id -> tests.id, спочатку видаляємо питання
+      const { error: qErr } = await supabase
+        .from("questions")
+        .delete()
+        .eq("test_id", testId);
+
+      // якщо таблиці questions ще нема або RLS не дає - qErr може бути
+      if (qErr) console.warn("delete questions warning:", qErr);
+
+      const { error } = await supabase.from("tests").delete().eq("id", testId);
+      if (error) throw error;
+
+      toast({ title: "Тест видалено." });
+      await loadTests();
     } catch (error) {
-      console.error("Error deleting test: ", error);
+      console.error("Error deleting test:", error);
       toast({
         variant: "destructive",
         title: "Помилка",
@@ -147,7 +245,10 @@ export default function TestsPage() {
 
   const formatDate = (date: any) => {
     if (!date) return "N/A";
-    const jsDate = date.toDate ? date.toDate() : new Date(date);
+    const jsDate =
+      typeof date === "string"
+        ? new Date(date)
+        : date?.toDate?.() ?? new Date(date);
     return format(jsDate, "dd.MM.yyyy");
   };
 
@@ -160,6 +261,7 @@ export default function TestsPage() {
           <CardHeader>
             <CardTitle>Створити новий тест</CardTitle>
           </CardHeader>
+
           <Form {...form}>
             <form onSubmit={form.handleSubmit(handleCreateTest)}>
               <CardContent className="space-y-4">
@@ -169,7 +271,11 @@ export default function TestsPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Предмет*</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value} disabled={loadingSubjects}>
+                      <Select
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
+                        disabled={loadingSubjects}
+                      >
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Оберіть предмет..." />
@@ -187,6 +293,7 @@ export default function TestsPage() {
                     </FormItem>
                   )}
                 />
+
                 <FormField
                   control={form.control}
                   name="title"
@@ -194,12 +301,16 @@ export default function TestsPage() {
                     <FormItem>
                       <FormLabel>Назва тесту*</FormLabel>
                       <FormControl>
-                        <Input placeholder="Напр. Українська мова - варіант 1" {...field} />
+                        <Input
+                          placeholder="Напр. Українська мова - варіант 1"
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+
                 <FormField
                   control={form.control}
                   name="description"
@@ -207,13 +318,17 @@ export default function TestsPage() {
                     <FormItem>
                       <FormLabel>Опис (необов'язково)</FormLabel>
                       <FormControl>
-                        <Textarea placeholder="Короткий опис тесту" {...field} />
+                        <Textarea
+                          placeholder="Короткий опис тесту"
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
               </CardContent>
+
               <CardFooter>
                 <Button type="submit" disabled={form.formState.isSubmitting}>
                   {form.formState.isSubmitting ? (
@@ -234,9 +349,11 @@ export default function TestsPage() {
           <CardHeader>
             <CardTitle>Список тестів</CardTitle>
             <CardDescription>
-              Тут знаходяться всі створені тести. Натисніть "Редагувати" для керування питаннями.
+              Тут знаходяться всі створені тести. Кнопку "Редагувати" увімкнемо
+              наступним кроком.
             </CardDescription>
           </CardHeader>
+
           <CardContent>
             {isLoading ? (
               <div className="flex justify-center items-center h-40">
@@ -244,8 +361,12 @@ export default function TestsPage() {
               </div>
             ) : !tests || tests.length === 0 ? (
               <div className="text-center text-muted-foreground py-12">
-                <h3 className="text-lg font-semibold">Ще не створено жодного тесту.</h3>
-                <p className="mt-1 text-sm">Скористайтеся формою зліва, щоб додати перший тест.</p>
+                <h3 className="text-lg font-semibold">
+                  Ще не створено жодного тесту.
+                </h3>
+                <p className="mt-1 text-sm">
+                  Скористайтеся формою зліва, щоб додати перший тест.
+                </p>
               </div>
             ) : (
               <Table>
@@ -261,34 +382,49 @@ export default function TestsPage() {
                 <TableBody>
                   {tests.map((test) => (
                     <TableRow key={test.id}>
-                      <TableCell className="font-medium">{test.title}</TableCell>
-                      <TableCell>{subjectsMap[test.subjectId] || "Невідомо"}</TableCell>
+                      <TableCell className="font-medium">
+                        {test.title}
+                      </TableCell>
+                      <TableCell>
+                        {subjectsMap[test.subjectId] || "Невідомо"}
+                      </TableCell>
                       <TableCell>{test.questions?.length || 0}</TableCell>
                       <TableCell>{formatDate(test.createdAt)}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                           <Button variant="outline" size="sm" asChild>
-                                <Link href={`/admin/tests/${test.id}`}>
-                                    <Pencil className="h-3 w-3 mr-1" /> Редагувати
-                                </Link>
-                            </Button>
+                          <Button variant="outline" size="sm" asChild disabled>
+                            <Link href={`/admin/tests/${test.id}`}>
+                              <Pencil className="h-3 w-3 mr-1" />
+                              Редагувати
+                            </Link>
+                          </Button>
+
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-destructive hover:text-destructive"
+                              >
                                 <Trash2 className="h-4 w-4" />
                                 <span className="sr-only">Видалити</span>
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                               <AlertDialogHeader>
-                                <AlertDialogTitle>Ви впевнені?</AlertDialogTitle>
+                                <AlertDialogTitle>
+                                  Ви впевнені?
+                                </AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  Цю дію неможливо скасувати. Це назавжди видалить тест "{test.title}".
+                                  Цю дію неможливо скасувати. Це назавжди
+                                  видалить тест "{test.title}".
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
                                 <AlertDialogCancel>Скасувати</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDeleteTest(test.id)}>
+                                <AlertDialogAction
+                                  onClick={() => handleDeleteTest(test.id)}
+                                >
                                   Видалити
                                 </AlertDialogAction>
                               </AlertDialogFooter>
